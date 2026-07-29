@@ -1,0 +1,7 @@
+enabled;station;series_id;measurement_set;variable;media;destination
+true;VX;145_VX;VX_;H;6;01_Rivieres/stations/145_VX/raw_data/H
+true;VX;145_VX;VX_;Q;16;01_Rivieres/stations/145_VX/raw_data/Q
+true;VX;145_VX;VX_;T;3;01_Rivieres/stations/145_VX/raw_data/T
+true;VX;145_VX;VX_;BAT_INT;100;BD_INST/VX/BAT_INT
+true;VX;145_VX;VX_;BAT_EXT;14;BD_INST/VX/BAT_EXT
+true;AR;AR;AR_;P;7;03_Pluie/stations/AR/raw_data/P

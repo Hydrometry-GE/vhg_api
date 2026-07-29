@@ -1,0 +1,25 @@
+profile: internal_archive
+
+api:
+  server: ${VHG_SERVER}
+  endpoint: /io/web_service_json.php
+  username: ${VHG_USERNAME}
+  dossier_id: ${VHG_DOSSIER_ID}
+  encrypted_password: ${VHG_ENCRYPTED_PASSWORD}
+  timeout_seconds: 60
+
+proxy:
+  enabled: false
+  http: ${HTTP_PROXY:-}
+  https: ${HTTPS_PROXY:-}
+
+storage:
+  root: ${DATA_ROOT:-}
+  filename: "{series_id}_{variable}_{year}_raw.csv"
+  log_dir: ${VHG_LOG_DIR}
+
+incremental:
+  initial_start: "2026-01-01T00:00:00Z"
+  overlap_minutes: 1440
+
+sources_file: sources.csv

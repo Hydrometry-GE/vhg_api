@@ -1,0 +1,77 @@
+# Downloading configured data
+
+`download_configured()` resolves enabled rows from `config/sources.csv`, calls
+the TDS API, and returns one `DownloadResult` per source.
+
+## Canonical raw schema
+
+Every returned frame and exported CSV uses these columns, in order:
+
+```text
+timestamp
+datetime_utc
+value
+station
+series_id
+variable
+measurement_set
+media
+```
+
+`datetime_utc` is the canonical, human-readable UTC datetime. `timestamp` is
+the corresponding Unix epoch value in whole seconds and is regenerated from
+`datetime_utc` whenever data are normalized or written. Older raw files without
+this column are migrated automatically on their next update.
+
+## Destination routing
+
+With `write_csv=True` and no `output_dir`, every source is written according to
+its own `destination` value.
+
+For a relative destination:
+
+```text
+01_Rivieres/stations/145_VX/raw_data/H
+```
+
+and `DATA_ROOT=D:/Hydrometrie`, the yearly file is:
+
+```text
+D:/Hydrometrie/01_Rivieres/stations/145_VX/raw_data/H/2026/145_VX_H_2026_raw.csv
+```
+
+For an absolute destination such as:
+
+```text
+S:/Technical/VX/BAT_INT
+```
+
+the root is bypassed and the yearly file is written directly below that path.
+POSIX (`/srv/...`) and UNC (`//server/share/...`) absolute paths are also
+recognized.
+
+This routing is archive-agnostic. Different variables from the same station may
+be sent to different drives, shares, archives, or temporary folders.
+
+Data crossing a calendar-year boundary are split into separate yearly files.
+`DownloadResult.output_files` contains every written path; `output_file` remains
+a convenience property when exactly one yearly file was produced.
+
+For tests or ad-hoc extraction, `output_dir` overrides row routing:
+
+```python
+results = download_configured(
+    config,
+    start="2026-01-01T00:00:00Z",
+    end="2026-01-02T00:00:00Z",
+    output_dir="runtime/downloads",
+    write_csv=True,
+)
+```
+
+## Merge and overlap
+
+Existing yearly CSVs are merged rather than blindly overwritten. Rows are
+sorted chronologically and duplicate timestamps retain the newly downloaded
+value. The default overlap is 1440 minutes (24 h), allowing corrected or late
+TDS values to replace older copies.
