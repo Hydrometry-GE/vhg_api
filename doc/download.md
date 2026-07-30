@@ -69,9 +69,33 @@ results = download_configured(
 )
 ```
 
-## Merge and overlap
+## Merge precedence and retrospective corrections
 
-Existing yearly CSVs are merged rather than blindly overwritten. Rows are
-sorted chronologically and duplicate timestamps retain the newly downloaded
-value. The default overlap is 1440 minutes (24 h), allowing corrected or late
-TDS values to replace older copies.
+Existing yearly CSVs are merged rather than blindly overwritten. The merge is
+ordered deliberately: archived rows are placed first and newly downloaded rows
+second. Deduplication then uses `datetime_utc` with a keep-last policy. Therefore,
+when both frames contain the same timestamp, the newly downloaded TDS record is
+retained.
+
+This rule is part of the archive contract, not merely an implementation detail.
+It allows corrected values on TDS to propagate into the local archive while
+leaving all other timestamps unchanged. Sorting, deduplication, timestamp
+regeneration, and file replacement are performed before an atomic rewrite.
+
+## Incremental overlap versus historical refresh
+
+The default incremental overlap is 1440 minutes (24 h). It automatically picks
+up late or corrected values only when their timestamps fall inside that overlap.
+A correction older than the overlap is invisible until its period is downloaded
+again.
+
+The CLI handles this through explicit bounds:
+
+```bash
+vhg-api download --start 2025-01-01T00:00:00Z --end 2025-01-31T23:59:59Z
+```
+
+Supplying `--start` disables incremental lower-bound calculation. The exact
+requested period is downloaded and passed through the same merge policy, so
+historical duplicate timestamps replace their previous archived values. `--end`
+is optional but may not be supplied without `--start`.

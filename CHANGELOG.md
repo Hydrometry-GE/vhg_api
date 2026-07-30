@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add explicit historical-refresh semantics: supplying `--start` bypasses incremental archive-state calculation, while optional `--end` bounds the refresh.
+- Reject `--end` without `--start` to avoid an ambiguous download range.
+- Document and test that newly downloaded rows replace archived rows at duplicate `datetime_utc` values.
+- Expand operational, download, troubleshooting, CLI, and function documentation for retrospective synchronization.
+
 - Remove the unused SQLite/state-database configuration and placeholder module.
 - Remove local user-specific destination paths from the example source catalogue.
 - Make the repository-local runner resolve default configuration paths from the project root.

@@ -28,34 +28,70 @@ When no archive exists, the lower bound is `incremental.initial_start`. The end
 bound defaults to the current UTC minute and is fixed once for the complete run,
 so all selected sources use the same period.
 
-## Useful commands
+## Historical refreshes
 
-Preview the selected sources without contacting the API or writing files:
+Values may be corrected retrospectively in TDS. An ordinary incremental run can
+only discover corrections that fall inside its configured overlap. To synchronize
+an older interval, provide an explicit `--start`:
+
+```bash
+vhg-api download \
+  --start 2026-07-01T00:00:00Z \
+  --end 2026-07-31T23:59:59Z
+```
+
+The presence of `--start` automatically activates **historical-refresh mode**.
+In this mode, the downloader:
+
+1. ignores the latest timestamp already present in the archive when calculating
+   the lower bound;
+2. requests the explicit interval from TDS;
+3. merges the downloaded rows into the existing yearly files;
+4. retains the newly downloaded row when `datetime_utc` is duplicated.
+
+This means a corrected TDS value replaces the older local value without deleting
+or rebuilding the rest of the archive. The `--end` option is optional and
+defaults to the current UTC minute, but it cannot be used without `--start`.
+
+A focused refresh is recommended when only one series was corrected:
+
+```bash
+vhg-api download \
+  --station VX \
+  --variable H \
+  --start 2025-05-01T00:00:00Z \
+  --end 2025-05-31T23:59:59Z
+```
+
+The same command can cross year boundaries. Downloaded rows are split into the
+appropriate yearly archive files before merging.
+
+## Command modes
+
+| Command | Lower-bound behaviour | Typical use |
+|---|---|---|
+| `vhg-api download` | Latest archive datetime minus overlap | Scheduled operational update |
+| `vhg-api download --start ...` | Uses the explicit start exactly | Refresh from a date through now |
+| `vhg-api download --start ... --end ...` | Uses both explicit bounds exactly | Refresh a bounded historical interval |
+| `vhg-api download --no-incremental` | Uses configured `incremental.initial_start` | Recovery or deliberate broad replay |
+
+`--no-incremental` is not required when `--start` is supplied; an explicit start
+already disables archive-state calculation.
+
+## Filters and dry runs
+
+Preview selected sources without contacting the API or writing files:
 
 ```bash
 vhg-api download --dry-run
 ```
 
-Limit a run:
+Limit either an incremental run or a historical refresh:
 
 ```bash
 vhg-api download --station VX
 vhg-api download --station VX --variable H
 vhg-api download --destination 01_Rivieres/stations/145_VX/raw_data/H
-```
-
-Run an explicit interval:
-
-```bash
-vhg-api download \
-  --start 2026-07-01T00:00:00Z \
-  --end 2026-07-31T00:00:00Z
-```
-
-Ignore existing files and use the supplied/configured lower bound directly:
-
-```bash
-vhg-api download --no-incremental --start 2026-01-01T00:00:00Z
 ```
 
 Stop immediately instead of continuing with healthy sources after a failure:

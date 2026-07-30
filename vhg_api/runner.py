@@ -102,11 +102,41 @@ def run_download(
     continue_on_error: bool = True,
     logger: logging.Logger | None = None,
 ) -> RunSummary:
-    """Run all selected sources, continuing source-by-source when requested.
+    """Download and archive all selected measurement sources.
 
-    ``start`` defaults to ``incremental.initial_start`` from the configuration.
-    ``end`` defaults to the current UTC minute. The same function is used by the
-    CLI and can also be imported by deployment-specific wrappers.
+    Parameters
+    ----------
+    config:
+        Fully resolved application configuration.
+    start, end:
+        Requested UTC bounds. ``start`` defaults to
+        ``incremental.initial_start`` and ``end`` defaults to the current UTC
+        minute. Naive datetime values are interpreted as UTC.
+    incremental:
+        When true, each source may advance ``start`` to its latest archived
+        timestamp minus the configured overlap. Set this to false for an
+        explicit historical refresh so the requested interval is downloaded
+        exactly.
+    station, variable, destination:
+        Optional exact source filters. Text matching for station and variable is
+        case-insensitive; destination matching is exact after path normalization.
+    dry_run:
+        Resolve and report sources without contacting TDS or writing files.
+    continue_on_error:
+        Continue with remaining sources after one source fails.
+    logger:
+        Optional logger, primarily useful to embedding applications and tests.
+
+    Returns
+    -------
+    RunSummary
+        Per-source outcomes and aggregate counts for the completed run.
+
+    Notes
+    -----
+    Newly downloaded rows are merged after existing rows. Duplicate
+    ``datetime_utc`` values therefore retain the newly downloaded record. This
+    lets a historical refresh propagate retrospective corrections made in TDS.
     """
     log = logger or logging.getLogger("vhg_api.runner")
     started_at = datetime.now(timezone.utc)

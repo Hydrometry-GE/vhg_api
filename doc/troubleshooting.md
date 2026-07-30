@@ -38,6 +38,29 @@ immediate stop is preferable during diagnostics.
 
 ## First run downloads too much or too little history
 
-Adjust `incremental.initial_start` in `config/settings.yml`, or supply `--start`
-for that run. Once files exist, normal incremental runs use their latest stored
+Adjust `incremental.initial_start` in `config/settings.yml` for the first normal
+run. To deliberately synchronize a historical period, supply `--start` and
+optionally `--end`; this activates historical-refresh mode and ignores archive
+state for the lower bound. Once files exist, normal incremental runs use their latest stored
 datetime and the configured overlap.
+
+## A retrospective correction is not appearing
+
+A normal run only re-downloads the configured overlap. If the corrected timestamp
+is older, explicitly refresh the affected interval and preferably filter the
+source:
+
+```bash
+vhg-api download --station VX --variable H \
+  --start 2025-05-01T00:00:00Z --end 2025-05-31T23:59:59Z
+```
+
+The downloaded record replaces the archived record with the same `datetime_utc`.
+Check the daily log to confirm the selected source, interval, row count, and
+written file.
+
+## `--end` is rejected
+
+`--end` must be paired with `--start`. An upper bound alone is ambiguous because
+there is no explicit historical lower bound. Use both options for a bounded
+refresh, or omit both for a normal incremental run.

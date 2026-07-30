@@ -13,7 +13,8 @@ and a repository-local runner suitable for manual use or cron.
 - retries, timeouts, and optional proxy handling;
 - generic relative, POSIX, Windows-drive, and UNC destination routing;
 - yearly semicolon-separated raw CSV archives;
-- overlap-based incremental updates with atomic rewrite and deduplication;
+- overlap-based incremental updates and explicit historical refreshes;
+- atomic archive rewrites with newly downloaded duplicate timestamps taking precedence;
 - source filters, dry run, logging, summaries, and meaningful exit codes;
 - operation both with and without installing the package;
 - automated pytest suite and numbered manual diagnostic scripts.
@@ -40,6 +41,19 @@ vhg-api validate-config
 vhg-api download --dry-run
 vhg-api download
 ```
+
+A normal `download` is incremental. To re-download corrected historical data,
+provide an explicit UTC start and, optionally, an end:
+
+```bash
+vhg-api download --station VX --variable H \
+  --start 2026-01-01T00:00:00Z \
+  --end 2026-01-31T23:59:59Z
+```
+
+Supplying `--start` activates historical-refresh mode: the interval is requested
+without advancing the lower bound from existing archive state. During the merge,
+newly downloaded rows replace older rows with the same `datetime_utc`.
 
 The default paths are `config/settings.yml` and `config/.env`. Explicit absolute
 paths are recommended in scheduled deployments.

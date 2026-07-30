@@ -38,8 +38,32 @@ def _validate_config(args: argparse.Namespace) -> int:
     return 0
 
 
+def _use_incremental_mode(args: argparse.Namespace) -> bool:
+    """Return whether existing archive state should advance the start time.
+
+    The normal ``download`` command is incremental: each source resumes from
+    its latest archived timestamp minus the configured overlap. Supplying an
+    explicit ``--start`` changes the meaning of the command to a historical
+    refresh, so the requested lower bound must be used exactly and existing
+    archive state must not move it forward.
+
+    ``--no-incremental`` remains available for first-run or recovery scenarios
+    where the configured ``incremental.initial_start`` should be used directly.
+    """
+    return not args.no_incremental and args.start is None
+
+
 def _download(args: argparse.Namespace) -> int:
-    """Execute an operational download and translate outcomes to exit codes."""
+    """Execute an operational download and translate outcomes to exit codes.
+
+    Exit code ``0`` means that every selected source succeeded, ``1`` denotes
+    an execution or source failure, and ``2`` denotes invalid configuration or
+    command-line arguments.
+    """
+    if args.end is not None and args.start is None:
+        print("Command error: --end requires --start")
+        return 2
+
     try:
         config = _load(args)
         log_path = configure_logging(config.storage.log_dir, verbose=args.verbose)
@@ -48,7 +72,7 @@ def _download(args: argparse.Namespace) -> int:
             config,
             start=args.start,
             end=args.end,
-            incremental=not args.no_incremental,
+            incremental=_use_incremental_mode(args),
             station=args.station,
             variable=args.variable,
             destination=args.destination,
@@ -83,12 +107,31 @@ def build_parser() -> argparse.ArgumentParser:
 
     download = subparsers.add_parser("download", help="update configured raw archives")
     _common_config_arguments(download)
-    download.add_argument("--start", help="lower UTC bound; defaults to incremental.initial_start")
-    download.add_argument("--end", help="upper UTC bound; defaults to current UTC minute")
+    download.add_argument(
+        "--start",
+        help=(
+            "explicit lower UTC bound; activates historical refresh mode and "
+            "bypasses incremental archive-state calculation"
+        ),
+    )
+    download.add_argument(
+        "--end",
+        help=(
+            "explicit upper UTC bound for a historical refresh; requires "
+            "--start and defaults to the current UTC minute"
+        ),
+    )
     download.add_argument("--station", help="select one station code")
     download.add_argument("--variable", help="select one variable")
     download.add_argument("--destination", help="select one exact destination")
-    download.add_argument("--no-incremental", action="store_true", help="ignore existing files")
+    download.add_argument(
+        "--no-incremental",
+        action="store_true",
+        help=(
+            "ignore existing files when calculating the lower bound; without "
+            "--start, use incremental.initial_start directly"
+        ),
+    )
     download.add_argument("--dry-run", action="store_true", help="show selected sources without downloading")
     download.add_argument("--stop-on-error", action="store_true", help="stop after the first failed source")
     download.add_argument("--verbose", action="store_true", help="enable debug logging")

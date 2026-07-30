@@ -106,6 +106,62 @@ def test_incremental_download_applies_configured_overlap(tmp_path: Path) -> None
     assert client.calls[0]["start"] == pd.Timestamp("2026-01-01T23:30:00Z")
 
 
+
+def test_historical_refresh_uses_explicit_start_despite_newer_archive(tmp_path: Path) -> None:
+    """Non-incremental refreshes must request the operator's exact lower bound."""
+    from vhg_api.storage import update_raw_archive
+
+    archive = tmp_path / "145_VX_H_2026_raw.csv"
+    update_raw_archive(pd.DataFrame({
+        "datetime_utc": pd.to_datetime(["2026-06-30T00:00:00Z"]),
+        "value": [1.0], "station": ["VX"], "series_id": ["145_VX"],
+        "variable": ["H"], "measurement_set": ["VX"], "media": [6],
+    }), archive)
+    client = FakeClient()
+
+    download_configured(
+        make_config(),
+        start="2026-01-01T00:00:00Z",
+        end="2026-01-31T23:59:59Z",
+        station="VX",
+        variable="H",
+        output_dir=tmp_path,
+        incremental=False,
+        client=client,
+    )
+
+    assert client.calls[0]["start"] == "2026-01-01T00:00:00Z"
+    assert client.calls[0]["end"] == "2026-01-31T23:59:59Z"
+
+
+def test_historical_refresh_replaces_archived_value(tmp_path: Path) -> None:
+    """A refreshed TDS value must win at an already archived timestamp."""
+    from vhg_api.storage import update_raw_archive
+
+    config = make_config(tmp_path)
+    path = tmp_path / "01_Rivieres/stations/145_VX/raw_data/H/2026/145_VX_H_2026_raw.csv"
+    update_raw_archive(pd.DataFrame({
+        "datetime_utc": pd.to_datetime(["2026-01-15T12:00:00Z"]),
+        "value": [1.0], "station": ["VX"], "series_id": ["145_VX"],
+        "variable": ["H"], "measurement_set": ["VX"], "media": [6],
+    }), path)
+
+    client = FakeClient(["2026-01-15T12:00:00Z"])
+    result = download_configured(
+        config,
+        start="2026-01-01T00:00:00Z",
+        end="2026-01-31T23:59:59Z",
+        station="VX",
+        variable="H",
+        write_csv=True,
+        incremental=False,
+        client=client,
+    )[0]
+
+    merged = pd.read_csv(result.output_file, sep=";")
+    assert len(merged) == 1
+    assert merged.loc[0, "value"] == 1.5
+
 def test_row_destination_routing_is_generic(tmp_path: Path) -> None:
     config = make_config(tmp_path)
     river = download_configured(

@@ -128,13 +128,43 @@ def download_configured(
     incremental: bool = False,
     client: TDSClient | None = None,
 ) -> tuple[DownloadResult, ...]:
-    """Download selected rows from ``sources.csv``.
+    """Download selected configured sources and optionally update yearly CSVs.
 
-    Frames use the canonical raw-data schema. With ``write_csv=True``, data are
-    split by UTC calendar year. When ``output_dir`` is omitted, each source is
-    routed using the row-specific ``destination`` path. Absolute destinations
-    are used directly; relative destinations are anchored below ``storage.root``.
-    Supplying ``output_dir`` remains useful for tests and ad-hoc extracts.
+    Parameters
+    ----------
+    config:
+        Resolved application configuration and source catalogue.
+    start, end:
+        UTC interval sent to TDS. These bounds are used directly unless
+        ``incremental`` is true.
+    destination, station, variable:
+        Optional filters applied to enabled rows in ``sources.csv``.
+    output_dir:
+        Optional directory overriding each row's configured destination. Intended
+        mainly for tests and ad-hoc extracts.
+    write_csv:
+        Write downloaded rows to yearly raw archive files.
+    merge_existing:
+        Merge into existing files atomically. Newly downloaded rows replace
+        existing rows at duplicate timestamps.
+    incremental:
+        For each source, advance the lower bound to the latest archived timestamp
+        minus ``incremental.overlap_minutes``. Historical refresh callers should
+        pass false so ``start`` is respected exactly.
+    client:
+        Optional reusable authenticated client. A temporary client is created and
+        closed when omitted.
+
+    Returns
+    -------
+    tuple[DownloadResult, ...]
+        One canonical data frame and its written file paths per selected source.
+
+    Notes
+    -----
+    Data crossing a UTC calendar-year boundary are split into separate files.
+    Relative destinations are anchored below ``storage.root``; absolute
+    destinations are used directly.
     """
     selected = select_sources(
         config, destination=destination, station=station, variable=variable
