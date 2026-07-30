@@ -1,5 +1,11 @@
 # Operational runner
 
+
+> **Path safety:** `sources_file: sources.csv` is resolved beside the selected
+> `settings.yml`, even when `--config` is absolute and the scheduler starts in a
+> different working directory. `--env-file` remains an independent CLI path;
+> use an absolute value in production schedules.
+
 The `download` command is the production entry point for both manual execution
 and cron. It updates all enabled rows in `config/sources.csv` unless filters are
 provided.

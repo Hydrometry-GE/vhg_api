@@ -105,3 +105,6 @@ actual deployment. They intentionally keep credentials out of their output.
 ## Version
 
 Current release: **1.0.0**.
+
+
+Relative paths declared in `settings.yml` are resolved from the settings file directory.

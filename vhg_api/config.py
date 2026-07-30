@@ -397,6 +397,20 @@ def _build_stations(sources: tuple[MeasurementSource, ...]) -> tuple[Station, ..
     )
 
 
+def _resolve_from_settings(value: str | Path, settings_path: Path) -> Path:
+    """Resolve a path declared inside ``settings.yml``.
+
+    Absolute paths are preserved. Relative paths are anchored to the directory
+    containing the loaded settings file, never to the process working
+    directory. This keeps a settings file and its companion files portable
+    when the CLI is launched from a scheduler or another directory.
+    """
+    candidate = Path(value).expanduser()
+    if not candidate.is_absolute():
+        candidate = settings_path.parent / candidate
+    return candidate.resolve()
+
+
 def load_config(
     config_file: str | Path = "config/settings.yml",
     env_file: str | Path | None = "config/.env",
@@ -406,10 +420,21 @@ def load_config(
     Parameters
     ----------
     config_file:
-        YAML settings path.
+        YAML settings path. It may be absolute or relative to the current
+        working directory because it is supplied externally by the caller.
     env_file:
-        Optional .env path. Values from the real process environment take
-        precedence over values in this file.
+        Optional .env path. Like ``config_file``, this externally supplied path
+        is interpreted relative to the current working directory unless it is
+        absolute. Values from the real process environment take precedence over
+        values in this file.
+
+    Notes
+    -----
+    Paths declared *inside* ``settings.yml`` follow a different rule: relative
+    values are resolved from the directory containing that settings file. In
+    particular, ``sources_file: sources.csv`` always refers to a companion CSV
+    beside the selected settings file, including when ``--config`` points to a
+    settings file outside the repository.
     """
     settings_path = Path(config_file).expanduser().resolve()
     if not settings_path.exists():
@@ -450,7 +475,7 @@ def load_config(
         )
 
     sources_name = _required_text(data, "sources_file", "settings")
-    sources_path = (settings_path.parent / sources_name).resolve()
+    sources_path = _resolve_from_settings(sources_name, settings_path)
     sources = _load_sources(sources_path)
 
     storage_root_text = str(storage_data.get("root") or "").strip()

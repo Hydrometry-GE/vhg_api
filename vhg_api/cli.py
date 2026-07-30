@@ -25,6 +25,8 @@ def _validate_config(args: argparse.Namespace) -> int:
         return 2
 
     print(f"Profile: {config.profile}")
+    print(f"Settings file: {config.settings_file}")
+    print(f"Sources file: {config.sources_file}")
     for station in config.stations:
         print(f"Station {station.code} ({station.series_id})")
         for source in station.sources:

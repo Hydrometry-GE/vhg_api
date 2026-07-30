@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Formalize and test that relative `sources_file` paths are resolved from the directory containing the selected `settings.yml`, including custom `--config` locations.
+- Document that `--env-file` remains an independent CLI path and is not affected by settings-relative path resolution.
+- Show resolved settings and sources paths in `validate-config` output.
+
 - Add explicit historical-refresh semantics: supplying `--start` bypasses incremental archive-state calculation, while optional `--end` bounds the refresh.
 - Reject `--end` without `--start` to avoid an ambiguous download range.
 - Document and test that newly downloaded rows replace archived rows at duplicate `datetime_utc` values.

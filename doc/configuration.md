@@ -1,5 +1,49 @@
 # Configuration
 
+## Configuration-file path resolution
+
+The path passed with `--config` locates `settings.yml`. Once that file has been
+selected, every relative companion-file path declared inside it is interpreted
+relative to the directory containing that exact settings file. It is **not**
+interpreted relative to the shell or scheduler working directory.
+
+For example:
+
+```text
+D:/Apps/vhg_api/config/
+├── settings.yml
+├── sources.csv
+└── .env
+```
+
+with:
+
+```yaml
+sources_file: sources.csv
+```
+
+and:
+
+```bash
+vhg-api download --config D:/Apps/vhg_api/config/settings.yml \
+  --env-file D:/Apps/vhg_api/config/.env
+```
+
+always resolves the catalogue as:
+
+```text
+D:/Apps/vhg_api/config/sources.csv
+```
+
+This remains true when the command is launched from another directory. An
+absolute `sources_file` value is used unchanged.
+
+`--env-file` is independent: its value is an externally supplied CLI path and
+is therefore used exactly as supplied (absolute paths are recommended for
+scheduled production runs). Resolving `sources_file` relative to `settings.yml`
+does not alter environment-file path handling.
+
+
 `vhg_api` separates API/runtime settings from the operational source catalogue.
 
 ## settings.yml

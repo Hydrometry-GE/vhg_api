@@ -178,3 +178,51 @@ true;VX;145_VX;VX;H;6;test/VX/H
     assert config.proxy.enabled is True
     assert config.proxy.http is None
     assert config.proxy.https == "http://proxy.test:8080"
+
+
+def test_sources_file_is_resolved_relative_to_selected_settings_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A custom --config location must carry its companion sources file."""
+    config_dir = tmp_path / "deployment" / "config"
+    config_dir.mkdir(parents=True)
+    sources = """enabled;station;series_id;measurement_set;variable;media;destination
+true;VX;145_VX;VX;H;6;archive/VX/H
+"""
+    settings, env = write_files(config_dir, sources)
+
+    unrelated_cwd = tmp_path / "scheduler-working-directory"
+    unrelated_cwd.mkdir()
+    monkeypatch.chdir(unrelated_cwd)
+
+    config = load_config(settings, env)
+
+    assert config.settings_file == settings.resolve()
+    assert config.sources_file == (config_dir / "sources.csv").resolve()
+    assert config.sources[0].station == "VX"
+
+
+def test_absolute_sources_file_in_settings_is_preserved(tmp_path: Path) -> None:
+    """An absolute sources_file value must not be rebased to settings.yml."""
+    config_dir = tmp_path / "config"
+    catalogue_dir = tmp_path / "catalogues"
+    config_dir.mkdir()
+    catalogue_dir.mkdir()
+
+    sources_path = catalogue_dir / "operational.csv"
+    sources_path.write_text(
+        "enabled;station;series_id;measurement_set;variable;media;destination\n"
+        "true;VX;145_VX;VX;H;6;archive/VX/H\n",
+        encoding="utf-8",
+    )
+    settings_path = config_dir / "settings.yml"
+    settings_path.write_text(
+        SETTINGS.replace("sources_file: sources.csv", f"sources_file: {sources_path.as_posix()}"),
+        encoding="utf-8",
+    )
+    env_path = config_dir / ".env"
+    env_path.write_text(ENV, encoding="utf-8")
+
+    config = load_config(settings_path, env_path)
+
+    assert config.sources_file == sources_path.resolve()
