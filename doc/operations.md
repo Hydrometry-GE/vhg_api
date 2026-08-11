@@ -35,6 +35,7 @@ This document is the complete command-line reference. For configuration file con
 |---|---|---|---|
 | `--config` | path | `config/settings.yml` | Path to `settings.yml`. |
 | `--env-file` | path | `config/.env` | Path to the `.env` file containing credentials and deployment-specific environment variables. |
+| `--sources` | path | `sources_file` from settings | Override the source catalogue. Relative paths are resolved from the selected `settings.yml` directory. |
 | `--include-disabled` | flag | off | Also display disabled source rows when validating the configuration. |
 
 ### `download` options
@@ -43,6 +44,7 @@ This document is the complete command-line reference. For configuration file con
 |---|---|---|---|
 | `--config` | path | `config/settings.yml` | Path to `settings.yml`. |
 | `--env-file` | path | `config/.env` | Path to the `.env` file. |
+| `--sources` | path | `sources_file` from settings | Override the source catalogue. Relative paths are resolved from the selected `settings.yml` directory. |
 | `--start` | UTC datetime | not set | Explicit lower time bound. Supplying it activates historical-refresh mode and bypasses incremental archive-state calculation. |
 | `--end` | UTC datetime | current UTC minute | Explicit upper time bound for a historical refresh. Valid only together with `--start`. |
 | `--station` | station code | all | Process only one station code, for example `VX`. |
@@ -53,7 +55,7 @@ This document is the complete command-line reference. For configuration file con
 | `--stop-on-error` | flag | off | Stop after the first failed source instead of continuing with the remaining sources. |
 | `--verbose` | flag | off | Enable debug-level logging. |
 
-There is currently **no `--sources` option**. The source catalogue is selected by `sources_file` in `settings.yml`.
+**Catalogue vs. filters:** `--sources` chooses which source catalogue to load. `--station`, `--variable`, and `--destination` then filter rows inside that selected catalogue. They never replace the source definitions themselves.
 
 ---
 
@@ -85,7 +87,7 @@ vhg-api download --help
 ### Synopsis
 
 ```bash
-vhg-api validate-config [--config PATH] [--env-file PATH] [--include-disabled]
+vhg-api validate-config [--config PATH] [--env-file PATH] [--sources PATH] [--include-disabled]
 ```
 
 ### Purpose
@@ -155,6 +157,16 @@ vhg-api validate-config --env-file D:/Apps/vhg_api/config/.env
 
 `--env-file` is independent of `--config`: the path supplied on the command line is used as supplied. For scheduled operation, an absolute path is recommended.
 
+### `--sources PATH`
+
+Overrides the source catalogue selected by `sources_file` in `settings.yml`. This is useful for tests, partial deployments, or alternate catalogues without editing the normal settings file.
+
+```bash
+vhg-api validate-config --sources sources_test.csv
+```
+
+If the supplied path is relative, it is resolved relative to the directory containing the active `settings.yml`. An absolute path is used unchanged. If `--sources` is omitted, `sources_file` from `settings.yml` is used.
+
 ### `--include-disabled`
 
 By default, validation output lists only enabled source rows. Use:
@@ -175,6 +187,7 @@ to also display disabled rows. This is useful when checking future or temporaril
 vhg-api download \
   [--config PATH] \
   [--env-file PATH] \
+  [--sources PATH] \
   [--start UTC_DATETIME] \
   [--end UTC_DATETIME] \
   [--station CODE] \
@@ -190,7 +203,53 @@ Without filters, `download` processes **all enabled rows** in the configured `so
 
 ---
 
-## 5. Time selection and operating modes
+## 5. Selecting the source catalogue and rows
+
+The source catalogue is always required. By default it comes from `sources_file` in `settings.yml`. `--sources` temporarily overrides that choice:
+
+```bash
+# Default catalogue declared in settings.yml
+vhg-api download
+
+# Alternate catalogue, without editing settings.yml
+vhg-api download --sources sources_test.csv
+```
+
+The selection order is:
+
+```text
+--sources PATH (if supplied)
+        ↓ otherwise
+sources_file from settings.yml
+        ↓
+load selected CSV catalogue
+        ↓
+apply --station / --variable / --destination filters
+        ↓
+download matching enabled rows
+```
+
+Thus `--station VX` does **not** bypass `sources.csv`; it selects the rows for station `VX` from whichever catalogue is active. The same principle applies to `--variable` and `--destination`. API identifiers, measurement sets, media, series IDs, and destinations still come from the selected CSV rows.
+
+### `--sources PATH`
+
+For a relative path, the base directory is the directory containing the active `settings.yml`. For example:
+
+```bash
+vhg-api download --config D:/VHG/config/settings.yml --sources sources_test.csv
+```
+
+loads:
+
+```text
+D:/VHG/config/sources_test.csv
+```
+
+An absolute `--sources` path is used unchanged.
+
+---
+
+## 6. Time selection and operating modes
 
 The time-related options determine whether `vhg_api` performs a routine incremental update or an explicit historical refresh.
 
@@ -290,7 +349,7 @@ When `--start` is already supplied, historical-refresh mode is already non-incre
 
 ---
 
-## 6. Source filters
+## 7. Source filters
 
 Filters can be used in either incremental mode or historical-refresh mode. They reduce the enabled rows selected from `sources.csv`.
 

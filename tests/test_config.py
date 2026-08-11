@@ -226,3 +226,34 @@ def test_absolute_sources_file_in_settings_is_preserved(tmp_path: Path) -> None:
     config = load_config(settings_path, env_path)
 
     assert config.sources_file == sources_path.resolve()
+
+
+
+def test_sources_override_relative_to_selected_settings_file(tmp_path: Path) -> None:
+    """A relative CLI sources override is anchored beside settings.yml."""
+    sources = """enabled;station;series_id;measurement_set;variable;media;destination
+true;VX;145_VX;VX;H;6;one
+"""
+    settings, env = write_files(tmp_path, sources)
+    override_sources = tmp_path / "sources_test.csv"
+    override_sources.write_text(sources, encoding="utf-8")
+
+    config = load_config(settings, env, sources_file="sources_test.csv")
+
+    assert config.sources_file == override_sources.resolve()
+
+
+def test_sources_override_absolute_path_is_preserved(tmp_path: Path) -> None:
+    """An absolute CLI sources override is used directly."""
+    sources = """enabled;station;series_id;measurement_set;variable;media;destination
+true;VX;145_VX;VX;H;6;one
+"""
+    settings, env = write_files(tmp_path, sources)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    override_sources = elsewhere / "custom.csv"
+    override_sources.write_text(sources, encoding="utf-8")
+
+    config = load_config(settings, env, sources_file=override_sources)
+
+    assert config.sources_file == override_sources.resolve()

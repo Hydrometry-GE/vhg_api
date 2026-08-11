@@ -414,6 +414,7 @@ def _resolve_from_settings(value: str | Path, settings_path: Path) -> Path:
 def load_config(
     config_file: str | Path = "config/settings.yml",
     env_file: str | Path | None = "config/.env",
+    sources_file: str | Path | None = None,
 ) -> AppConfig:
     """Load, expand, validate, and normalize the complete configuration.
 
@@ -427,6 +428,11 @@ def load_config(
         is interpreted relative to the current working directory unless it is
         absolute. Values from the real process environment take precedence over
         values in this file.
+    sources_file:
+        Optional source-catalogue override. When omitted, ``sources_file`` is
+        read from ``settings.yml``. Relative override paths are resolved from
+        the directory containing the selected settings file, using the same
+        rule as a relative ``sources_file`` declared in YAML.
 
     Notes
     -----
@@ -474,7 +480,10 @@ def load_config(
             "proxy.enabled is true, but neither proxy.http nor proxy.https is defined"
         )
 
-    sources_name = _required_text(data, "sources_file", "settings")
+    if sources_file is None:
+        sources_name: str | Path = _required_text(data, "sources_file", "settings")
+    else:
+        sources_name = sources_file
     sources_path = _resolve_from_settings(sources_name, settings_path)
     sources = _load_sources(sources_path)
 

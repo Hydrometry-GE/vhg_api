@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Formalize and test that relative `sources_file` paths are resolved from the directory containing the selected `settings.yml`, including custom `--config` locations.
+- Add `--sources PATH` to `download` and `validate-config` as a temporary source-catalogue override, with relative paths resolved beside the active `settings.yml`.
 - Document that `--env-file` remains an independent CLI path and is not affected by settings-relative path resolution.
 - Show resolved settings and sources paths in `validate-config` output.
 

@@ -38,6 +38,8 @@ D:/Apps/vhg_api/config/sources.csv
 This remains true when the command is launched from another directory. An
 absolute `sources_file` value is used unchanged.
 
+The CLI may override this setting with `--sources PATH`. A relative `--sources` value is also resolved from the directory containing the active `settings.yml`; an absolute override is used unchanged. The override does not modify `settings.yml`.
+
 `--env-file` is independent: its value is an externally supplied CLI path and
 is therefore used exactly as supplied (absolute paths are recommended for
 scheduled production runs). Resolving `sources_file` relative to `settings.yml`

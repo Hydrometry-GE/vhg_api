@@ -42,3 +42,12 @@ def test_end_without_start_is_rejected(capsys) -> None:
 
     assert exit_code == 2
     assert "--end requires --start" in capsys.readouterr().out
+
+
+def test_sources_option_is_available_to_both_subcommands() -> None:
+    """Both operational commands may override the configured source catalogue."""
+    validate_args = build_parser().parse_args(["validate-config", "--sources", "test.csv"])
+    download_args = build_parser().parse_args(["download", "--sources", "test.csv"])
+
+    assert validate_args.sources == "test.csv"
+    assert download_args.sources == "test.csv"

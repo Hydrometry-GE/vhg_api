@@ -13,7 +13,7 @@ from .runner import configure_logging, run_download
 
 def _load(args: argparse.Namespace):
     """Load configuration paths supplied by one CLI subcommand."""
-    return load_config(args.config, args.env_file)
+    return load_config(args.config, args.env_file, sources_file=args.sources)
 
 
 def _validate_config(args: argparse.Namespace) -> int:
@@ -94,6 +94,13 @@ def _common_config_arguments(parser: argparse.ArgumentParser) -> None:
     """Add settings and environment-file options shared by subcommands."""
     parser.add_argument("--config", default="config/settings.yml")
     parser.add_argument("--env-file", default="config/.env")
+    parser.add_argument(
+        "--sources",
+        help=(
+            "override the source catalogue declared by sources_file in settings.yml; "
+            "relative paths are resolved from the settings.yml directory"
+        ),
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:

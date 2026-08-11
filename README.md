@@ -79,6 +79,7 @@ Options:
 |---|---|
 | `--config PATH` | Path to `settings.yml`. Default: `config/settings.yml`. |
 | `--env-file PATH` | Path to the `.env` file. Default: `config/.env`. |
+| `--sources PATH` | Override the catalogue from `sources_file`; relative paths resolve beside the active `settings.yml`. |
 | `--include-disabled` | Also display disabled rows from the source catalogue. |
 
 Example:
@@ -106,6 +107,7 @@ Common configuration options:
 |---|---|
 | `--config PATH` | Path to `settings.yml`. Default: `config/settings.yml`. |
 | `--env-file PATH` | Path to the `.env` file. Default: `config/.env`. |
+| `--sources PATH` | Override the catalogue from `sources_file`; relative paths resolve beside the active `settings.yml`. |
 
 Time and synchronization options:
 
@@ -164,10 +166,11 @@ corrections to propagate into the raw archive.
 
 `--end` cannot be used alone. It must be paired with `--start`.
 
-There is currently no `--sources` CLI option. The source catalogue is selected
-through `sources_file` in `settings.yml`. This keeps the selected settings file
-and its companion catalogue together; `sources_file: sources.csv` is resolved
-beside the chosen `settings.yml`.
+By default, the source catalogue is selected through `sources_file` in
+`settings.yml`. `--sources PATH` can temporarily override that catalogue without
+editing the settings file. Relative `--sources` paths use the same base directory:
+the directory containing the active `settings.yml`. After the catalogue is loaded,
+`--station`, `--variable`, and `--destination` filter rows within it.
 
 For the full operational behavior, option interactions, exit codes, and cron
 examples, see [Operational runner and command-line reference](doc/operations.md).
