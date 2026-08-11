@@ -60,3 +60,12 @@ python -m pip install .
 Copy `config/.env.example` to `config/.env` and adapt it locally. Never commit
 `config/.env`. Real process environment variables override non-empty values in
 the file, which allows an IT deployment system to inject secrets directly.
+
+## Command-line options
+
+For the complete CLI reference, including `validate-config`, incremental and
+historical download modes, filters, dry-run behavior, logging, exit codes, and
+cron examples, see [Operational runner and command-line reference](operations.md).
+
+Use `vhg-api COMMAND --help` (or the equivalent repository wrapper) to inspect
+the options implemented by the installed version.

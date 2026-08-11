@@ -3,12 +3,12 @@
 `vhg_api` is a configuration-driven Python client and operational downloader for
 the Tetraèdre TDS JSON API. Version 1.0.0 provides a stable raw-data schema, safe
 incremental archive updates, generic destination routing, an installable command,
-and a repository-local runner suitable for manual use or cron.
+and a repository-local runner suitable for manual use or scheduled execution.
 
 ## Main capabilities
 
 - short YAML deployment configuration and semicolon-separated source catalogue;
-- secrets and paths supplied through `.env` or process environment variables;
+- secrets and machine-specific paths supplied through `.env` or process environment variables;
 - SHA256 challenge authentication and access checks;
 - retries, timeouts, and optional proxy handling;
 - generic relative, POSIX, Windows-drive, and UNC destination routing;
@@ -17,7 +17,7 @@ and a repository-local runner suitable for manual use or cron.
 - atomic archive rewrites with newly downloaded duplicate timestamps taking precedence;
 - source filters, dry run, logging, summaries, and meaningful exit codes;
 - operation both with and without installing the package;
-- automated pytest suite and numbered manual diagnostic scripts.
+- automated pytest suite and manual diagnostic scripts.
 
 ## Quick start without installing the package
 
@@ -33,6 +33,10 @@ cp config/.env.example config/.env
 On Windows, use `.venv\Scripts\python.exe` and copy `.env.example` through
 Explorer or PowerShell.
 
+The repository-local wrapper changes to the repository root before invoking the
+CLI, so its default `config/settings.yml` and `config/.env` paths work even when
+the script is launched from Spyder or from another working directory.
+
 ## Installed command
 
 ```bash
@@ -42,25 +46,135 @@ vhg-api download --dry-run
 vhg-api download
 ```
 
-A normal `download` is incremental. To re-download corrected historical data,
-provide an explicit UTC start and, optionally, an end:
+When the installed `vhg-api` command is used, the default CLI paths
+`config/settings.yml` and `config/.env` are relative to the current working
+directory. For scheduled deployments, explicit absolute `--config` and
+`--env-file` paths are therefore recommended.
+
+## Command-line reference
+
+General help and version:
 
 ```bash
+vhg-api --help
+vhg-api --version
+vhg-api validate-config --help
+vhg-api download --help
+```
+
+The CLI has two subcommands:
+
+- `validate-config`: load and validate settings, environment variables, and the source catalogue;
+- `download`: perform a dry run, normal incremental synchronization, or explicit historical refresh.
+
+### `validate-config`
+
+```bash
+vhg-api validate-config [OPTIONS]
+```
+
+Options:
+
+| Option | Meaning |
+|---|---|
+| `--config PATH` | Path to `settings.yml`. Default: `config/settings.yml`. |
+| `--env-file PATH` | Path to the `.env` file. Default: `config/.env`. |
+| `--include-disabled` | Also display disabled rows from the source catalogue. |
+
+Example:
+
+```bash
+vhg-api validate-config \
+  --config D:/Apps/vhg_api/config/settings.yml \
+  --env-file D:/Apps/vhg_api/config/.env
+```
+
+`validate-config` prints the resolved settings path, the resolved `sources.csv`
+path, and the configured measurement sources. A relative `sources_file` declared
+inside `settings.yml` is resolved relative to the directory containing that
+specific `settings.yml`, not relative to the shell working directory.
+
+### `download`
+
+```bash
+vhg-api download [OPTIONS]
+```
+
+Common configuration options:
+
+| Option | Meaning |
+|---|---|
+| `--config PATH` | Path to `settings.yml`. Default: `config/settings.yml`. |
+| `--env-file PATH` | Path to the `.env` file. Default: `config/.env`. |
+
+Time and synchronization options:
+
+| Option | Meaning |
+|---|---|
+| `--start DATETIME` | Explicit lower UTC bound. Supplying it activates historical-refresh mode and bypasses incremental archive-state calculation. |
+| `--end DATETIME` | Explicit upper UTC bound. Requires `--start`; if omitted while `--start` is present, the current UTC minute is used. |
+| `--no-incremental` | Ignore existing archive timestamps. Without `--start`, use `incremental.initial_start` directly. |
+
+Source-selection options:
+
+| Option | Meaning |
+|---|---|
+| `--station CODE` | Select one station code; matching is case-insensitive. |
+| `--variable CODE` | Select one variable; matching is case-insensitive. |
+| `--destination PATH` | Select one exact configured destination after path normalization. |
+
+Execution options:
+
+| Option | Meaning |
+|---|---|
+| `--dry-run` | Resolve and report selected sources without contacting TDS or writing data files. |
+| `--stop-on-error` | Stop after the first source failure instead of continuing with remaining sources. |
+| `--verbose` | Enable debug-level console and file logging. |
+
+Examples:
+
+```bash
+# Normal incremental synchronization
+vhg-api download
+
+# Preview selection without API calls or writes
+vhg-api download --dry-run
+
+# Incremental update for one series selection
+vhg-api download --station VX --variable H
+
+# Historical refresh from a date through now
+vhg-api download --station VX --variable H \
+  --start 2026-01-01T00:00:00Z
+
+# Bounded historical refresh
 vhg-api download --station VX --variable H \
   --start 2026-01-01T00:00:00Z \
   --end 2026-01-31T23:59:59Z
+
+# Deliberately replay from incremental.initial_start
+vhg-api download --no-incremental
 ```
 
-Supplying `--start` activates historical-refresh mode: the interval is requested
-without advancing the lower bound from existing archive state. During the merge,
-newly downloaded rows replace older rows with the same `datetime_utc`.
+A normal `download` is incremental. Supplying `--start` activates historical
+refresh mode: the requested lower bound is used exactly instead of being moved
+forward from existing archive state. During the merge, newly downloaded rows
+replace older rows with the same `datetime_utc`, allowing retrospective TDS
+corrections to propagate into the raw archive.
 
-The default paths are `config/settings.yml` and `config/.env`. Explicit absolute
-paths are recommended in scheduled deployments.
+`--end` cannot be used alone. It must be paired with `--start`.
+
+There is currently no `--sources` CLI option. The source catalogue is selected
+through `sources_file` in `settings.yml`. This keeps the selected settings file
+and its companion catalogue together; `sources_file: sources.csv` is resolved
+beside the chosen `settings.yml`.
+
+For the full operational behavior, option interactions, exit codes, and cron
+examples, see [Operational runner and command-line reference](doc/operations.md).
 
 ## Configuration
 
-- `config/settings.yml`: API, proxy, storage, logging, and incremental settings;
+- `config/settings.yml`: API, proxy, storage, logging, incremental settings, and `sources_file`;
 - `config/sources.csv`: enabled sources and their destinations;
 - `config/.env`: local secrets and deployment paths; never commit this file.
 
@@ -70,6 +184,30 @@ Example incremental configuration:
 incremental:
   initial_start: "2026-01-01T00:00:00Z"
   overlap_minutes: 1440
+```
+
+Path-resolution rule for companion files declared inside `settings.yml`:
+
+- relative paths are resolved from the directory containing the selected settings file;
+- absolute paths are used unchanged.
+
+For example, when this command is used:
+
+```bash
+vhg-api download --config D:/Apps/vhg_api/config/settings.yml \
+  --env-file D:/Apps/vhg_api/config/.env
+```
+
+and `settings.yml` contains:
+
+```yaml
+sources_file: sources.csv
+```
+
+then the catalogue resolves to:
+
+```text
+D:/Apps/vhg_api/config/sources.csv
 ```
 
 The canonical raw schema is:
@@ -86,7 +224,7 @@ the incremental state, while daily log files record execution history.
 
 - [Installation and execution](doc/installation.md)
 - [Configuration reference](doc/configuration.md)
-- [Operational runner and cron](doc/operations.md)
+- [Operational runner and command-line reference](doc/operations.md)
 - [Raw data format](doc/data_format.md)
 - [Download and storage internals](doc/download.md)
 - [Client reference](doc/client.md)
@@ -99,12 +237,6 @@ the incremental state, while daily log files record execution history.
 python -m pytest
 ```
 
-The scripts under `scripts/test/` provide ordered manual diagnostics for an
-actual deployment. They intentionally keep credentials out of their output.
-
 ## Version
 
 Current release: **1.0.0**.
-
-
-Relative paths declared in `settings.yml` are resolved from the settings file directory.
