@@ -1,76 +1,120 @@
-# Operational runner and command-line reference
+# Command-line reference and operational use
 
-The `vhg-api` command is the operational interface for manual execution and
-scheduled synchronization. The repository-local wrapper
-`scripts/run_download.py` forwards the same arguments to the same CLI code, so
-both execution modes have identical options and download behavior.
+`vhg_api` provides two command-line commands:
 
-## 1. Two ways to run the same CLI
+```text
+vhg-api validate-config
+vhg-api download
+```
+
+The same interface is available without installing the package:
+
+```text
+python scripts/run_download.py validate-config
+python scripts/run_download.py download
+```
+
+This document is the complete command-line reference. For configuration file contents, see [`configuration.md`](configuration.md).
+
+---
+
+## 1. Quick reference
+
+### General command
+
+| Command / option | Purpose |
+|---|---|
+| `vhg-api --help` | Show top-level help and available commands. |
+| `vhg-api --version` | Print the installed `vhg_api` version. |
+| `vhg-api validate-config` | Validate settings, environment variables, and the source catalogue. |
+| `vhg-api download` | Download and update the configured raw archives. |
+
+### `validate-config` options
+
+| Option | Value | Default | Purpose |
+|---|---|---|---|
+| `--config` | path | `config/settings.yml` | Path to `settings.yml`. |
+| `--env-file` | path | `config/.env` | Path to the `.env` file containing credentials and deployment-specific environment variables. |
+| `--include-disabled` | flag | off | Also display disabled source rows when validating the configuration. |
+
+### `download` options
+
+| Option | Value | Default | Purpose |
+|---|---|---|---|
+| `--config` | path | `config/settings.yml` | Path to `settings.yml`. |
+| `--env-file` | path | `config/.env` | Path to the `.env` file. |
+| `--start` | UTC datetime | not set | Explicit lower time bound. Supplying it activates historical-refresh mode and bypasses incremental archive-state calculation. |
+| `--end` | UTC datetime | current UTC minute | Explicit upper time bound for a historical refresh. Valid only together with `--start`. |
+| `--station` | station code | all | Process only one station code, for example `VX`. |
+| `--variable` | variable code | all | Process only one variable, for example `H`, `Q`, `T`, or `P`. |
+| `--destination` | exact destination | all | Process only source rows whose configured `destination` exactly matches the supplied value. |
+| `--no-incremental` | flag | off | Ignore existing archive timestamps when calculating the lower bound. Without `--start`, use `incremental.initial_start` directly. |
+| `--dry-run` | flag | off | Show which sources would be processed without downloading or writing data. |
+| `--stop-on-error` | flag | off | Stop after the first failed source instead of continuing with the remaining sources. |
+| `--verbose` | flag | off | Enable debug-level logging. |
+
+There is currently **no `--sources` option**. The source catalogue is selected by `sources_file` in `settings.yml`.
+
+---
+
+## 2. Command syntax
 
 Installed package:
 
 ```bash
-vhg-api COMMAND [OPTIONS]
+vhg-api [--version] {validate-config,download} ...
 ```
 
-Repository mode:
+Repository-local runner:
 
 ```bash
-python scripts/run_download.py COMMAND [OPTIONS]
+python scripts/run_download.py [--version] {validate-config,download} ...
 ```
 
-The repository wrapper changes its working directory to the repository root
-before invoking the CLI. Therefore its default paths `config/settings.yml` and
-`config/.env` are stable even when launched from Spyder or another directory.
-
-The installed `vhg-api` command does not change the working directory. Its
-default `--config config/settings.yml` and `--env-file config/.env` values are
-therefore interpreted from the process working directory. Production schedulers
-should use explicit absolute paths.
-
-Recommended scheduled form:
+For command-specific help:
 
 ```bash
-vhg-api download \
-  --config /opt/vhg_api/config/settings.yml \
-  --env-file /opt/vhg_api/config/.env
-```
-
-## 2. General help and version
-
-```bash
-vhg-api --help
-vhg-api --version
 vhg-api validate-config --help
 vhg-api download --help
 ```
 
-`vhg-api` requires one subcommand: either `validate-config` or `download`.
-Running `vhg-api` without a subcommand returns argparse exit code `2`.
+---
 
 ## 3. `validate-config`
 
-Syntax:
+### Synopsis
 
 ```bash
-vhg-api validate-config [OPTIONS]
+vhg-api validate-config [--config PATH] [--env-file PATH] [--include-disabled]
 ```
 
-Purpose: load the selected `settings.yml`, load the selected `.env`, resolve the
-source catalogue, validate the configuration, and print the configured sources.
-It does not download measurements.
+### Purpose
 
-### Options
+`validate-config` loads the deployment configuration without downloading data. It reports the resolved settings and source-catalogue paths and lists the configured sources.
 
-#### `--config PATH`
+A normal check is:
 
-Path to `settings.yml`.
-
-Default:
-
-```text
-config/settings.yml
+```bash
+vhg-api validate-config
 ```
+
+For production or scheduled deployments, explicit absolute paths are recommended:
+
+```bash
+vhg-api validate-config \
+  --config /opt/vhg_api/config/settings.yml \
+  --env-file /opt/vhg_api/config/.env
+```
+
+On Windows:
+
+```powershell
+vhg-api validate-config --config "D:\Apps\vhg_api\config\settings.yml" --env-file "D:\Apps\vhg_api\config\.env"
+```
+
+### `--config PATH`
+
+Selects the `settings.yml` file.
 
 Example:
 
@@ -78,111 +122,79 @@ Example:
 vhg-api validate-config --config D:/Apps/vhg_api/config/settings.yml
 ```
 
-Once the settings file is selected, relative companion-file paths declared
-inside it are resolved from **that settings file's directory**. For example:
+Relative file paths declared *inside* `settings.yml` are resolved relative to the directory containing the selected settings file. Therefore, if:
+
+```text
+D:/Apps/vhg_api/config/settings.yml
+D:/Apps/vhg_api/config/sources.csv
+```
+
+and `settings.yml` contains:
 
 ```yaml
 sources_file: sources.csv
 ```
 
-inside:
-
-```text
-D:/Apps/vhg_api/config/settings.yml
-```
-
-resolves to:
+then `sources.csv` is resolved as:
 
 ```text
 D:/Apps/vhg_api/config/sources.csv
 ```
 
-An absolute `sources_file` is used unchanged.
+This remains true regardless of the process working directory.
 
-#### `--env-file PATH`
+### `--env-file PATH`
 
-Path to the `.env` file.
-
-Default:
-
-```text
-config/.env
-```
-
-This path is independent of `settings.yml` and is interpreted exactly as
-supplied to the CLI. For scheduled execution, use an absolute path.
+Selects the `.env` file used for credentials and deployment-specific environment variables.
 
 Example:
 
 ```bash
-vhg-api validate-config \
-  --config D:/Apps/vhg_api/config/settings.yml \
-  --env-file D:/Apps/vhg_api/config/.env
+vhg-api validate-config --env-file D:/Apps/vhg_api/config/.env
 ```
 
-#### `--include-disabled`
+`--env-file` is independent of `--config`: the path supplied on the command line is used as supplied. For scheduled operation, an absolute path is recommended.
 
-By default, the validation output lists enabled source rows. Add this flag to
-also display disabled rows:
+### `--include-disabled`
+
+By default, validation output lists only enabled source rows. Use:
 
 ```bash
 vhg-api validate-config --include-disabled
 ```
 
-Disabled rows remain disabled; the flag only changes validation output.
+to also display disabled rows. This is useful when checking future or temporarily inactive media configured in `sources.csv`.
 
-### Validation output
-
-A successful validation prints at least:
-
-- the profile name;
-- the resolved settings file;
-- the resolved sources file;
-- configured stations and source mappings;
-- `Configuration OK.`
-
-Configuration failures return exit code `2`.
+---
 
 ## 4. `download`
 
-Syntax:
+### Synopsis
 
 ```bash
-vhg-api download [OPTIONS]
+vhg-api download \
+  [--config PATH] \
+  [--env-file PATH] \
+  [--start UTC_DATETIME] \
+  [--end UTC_DATETIME] \
+  [--station CODE] \
+  [--variable CODE] \
+  [--destination PATH] \
+  [--no-incremental] \
+  [--dry-run] \
+  [--stop-on-error] \
+  [--verbose]
 ```
 
-Without time overrides, `download` performs the normal incremental archive
-update for every enabled source matching the optional filters.
+Without filters, `download` processes **all enabled rows** in the configured `sources.csv`.
 
-## 5. Configuration options shared by `download`
+---
 
-### `--config PATH`
+## 5. Time selection and operating modes
 
-Select a non-default `settings.yml`:
+The time-related options determine whether `vhg_api` performs a routine incremental update or an explicit historical refresh.
 
-```bash
-vhg-api download --config D:/Apps/vhg_api/config/settings.yml
-```
-
-The `sources_file` inside this selected file follows the settings-relative path
-rule described above.
-
-### `--env-file PATH`
-
-Select a non-default `.env`:
-
-```bash
-vhg-api download --env-file D:/Apps/vhg_api/config/.env
-```
-
-`--env-file` is independent from settings-relative path resolution.
-
-There is currently **no `--sources` option**. The source catalogue is selected
-through `sources_file` inside `settings.yml`.
-
-## 6. Normal incremental mode
-
-Command:
+### 5.1 Normal incremental update
 
 ```bash
 vhg-api download
@@ -190,41 +202,57 @@ vhg-api download
 
 For each selected source, the runner:
 
-1. uses `incremental.initial_start` as the baseline lower bound;
-2. checks the existing raw yearly archive;
-3. if existing data are present, advances the source-specific lower bound to
-   the latest archived `datetime_utc` minus `incremental.overlap_minutes`;
-4. downloads through the current UTC minute;
-5. merges existing and downloaded rows;
-6. sorts by `datetime_utc` and removes duplicate timestamps, retaining the newly
-   downloaded row;
-7. rewrites yearly files atomically.
+1. inspects the existing archive file;
+2. finds the latest archived `datetime_utc`;
+3. subtracts `incremental.overlap_minutes`;
+4. downloads from that point to the current UTC minute;
+5. merges the new rows with the existing yearly file;
+6. sorts by `datetime_utc`;
+7. removes duplicate timestamps, keeping the **newly downloaded row**.
 
-The overlap is intentionally re-downloaded so delayed transmissions and recent
-retrospective corrections can replace archived values.
+The overlap allows delayed observations and recent retrospective corrections on the VHG/TDS platform to be picked up automatically.
 
-When no archive exists, the first normal incremental run begins at
-`incremental.initial_start`.
+If no archive exists yet, `incremental.initial_start` from `settings.yml` is used.
 
-## 7. Historical refresh options
+### 5.2 `--start UTC_DATETIME`
 
-### `--start DATETIME`
+Supplying `--start` activates **historical-refresh mode**.
 
-Supplying `--start` activates historical-refresh mode:
+Example:
 
 ```bash
 vhg-api download --start 2026-07-01T00:00:00Z
 ```
 
-The explicit lower bound is used exactly. Existing archive state does not move
-it forward. If `--end` is omitted, the upper bound is the current UTC minute.
+In historical-refresh mode, existing archive timestamps do **not** move the requested start forward. The explicit start is used exactly, and the end defaults to the current UTC minute.
 
-Naive datetime values accepted by the underlying parser are interpreted as UTC,
-but explicit UTC values ending in `Z` are recommended operationally.
+This mode is intended for re-downloading older data after retrospective corrections on the VHG/TDS platform.
 
-### `--end DATETIME`
+### 5.3 `--start` together with `--end`
 
-Define an explicit upper bound:
+Use both options to refresh a bounded period:
+
+```bash
+vhg-api download \
+  --start 2025-05-01T00:00:00Z \
+  --end 2025-05-31T23:59:59Z
+```
+
+The downloaded rows are merged into the existing archive. If an existing row and a newly downloaded row have the same `datetime_utc`, the newly downloaded row wins.
+
+This makes historical refreshes safe for correcting previously archived values without rebuilding unrelated periods.
+
+### 5.4 `--end UTC_DATETIME`
+
+`--end` cannot be used alone.
+
+This is invalid:
+
+```bash
+vhg-api download --end 2026-07-31T23:59:59Z
+```
+
+Use `--start` as well:
 
 ```bash
 vhg-api download \
@@ -232,18 +260,76 @@ vhg-api download \
   --end 2026-07-31T23:59:59Z
 ```
 
-`--end` requires `--start`. Using `--end` alone is rejected with command exit
-code `2`.
+### 5.5 `--no-incremental`
 
-### Why historical refresh exists
+```bash
+vhg-api download --no-incremental
+```
 
-A correction made retrospectively on TDS can only be discovered by an ordinary
-incremental run when the corrected timestamp lies inside the configured overlap.
-For older changes, explicitly re-download the affected interval. During the
-merge, the newly downloaded value replaces the older local row sharing the same
-`datetime_utc`.
+This tells the runner not to use the latest timestamp already present in the archive when determining the lower bound.
 
-Example focused correction refresh:
+Without `--start`, the lower bound becomes the configured:
+
+```yaml
+incremental:
+  initial_start: "..."
+```
+
+This is mainly useful for recovery, testing, or a deliberate broad replay.
+
+When `--start` is already supplied, historical-refresh mode is already non-incremental, so `--no-incremental` is unnecessary.
+
+### Mode summary
+
+| Invocation | Lower bound | Upper bound | Typical use |
+|---|---|---|---|
+| `vhg-api download` | Latest archive time minus overlap; or `initial_start` if no archive exists | Current UTC minute | Normal scheduled synchronization |
+| `vhg-api download --start START` | Exact `START` | Current UTC minute | Refresh from a historical date through now |
+| `vhg-api download --start START --end END` | Exact `START` | Exact `END` | Refresh a bounded historical period |
+| `vhg-api download --no-incremental` | `incremental.initial_start` | Current UTC minute | Recovery or deliberate broad replay |
+
+---
+
+## 6. Source filters
+
+Filters can be used in either incremental mode or historical-refresh mode. They reduce the enabled rows selected from `sources.csv`.
+
+### `--station CODE`
+
+Process only one station code:
+
+```bash
+vhg-api download --station VX
+```
+
+A station can still contain several enabled variables/media, so this may process several source rows.
+
+Example historical refresh for one station:
+
+```bash
+vhg-api download \
+  --station VX \
+  --start 2025-05-01T00:00:00Z \
+  --end 2025-05-31T23:59:59Z
+```
+
+### `--variable CODE`
+
+Process only one variable:
+
+```bash
+vhg-api download --variable Q
+```
+
+The filter applies across all enabled stations unless combined with another filter.
+
+Example:
+
+```bash
+vhg-api download --station VX --variable H
+```
+
+This is the recommended way to refresh a single station/variable combination after a correction:
 
 ```bash
 vhg-api download \
@@ -253,67 +339,32 @@ vhg-api download \
   --end 2025-05-31T23:59:59Z
 ```
 
-Historical intervals may cross calendar-year boundaries; rows are split into the
-appropriate yearly files before merging.
-
-## 8. `--no-incremental`
-
-```bash
-vhg-api download --no-incremental
-```
-
-This disables use of existing archive timestamps when calculating the lower
-bound. If no explicit `--start` is supplied, the run begins directly from
-`incremental.initial_start`.
-
-Typical uses include:
-
-- deliberate replay from the configured initial date;
-- recovery or diagnostic runs where existing archive state should not advance
-  the request start.
-
-`--no-incremental` is unnecessary when `--start` is already present, because an
-explicit start automatically activates non-incremental historical-refresh mode.
-
-## 9. Source-selection filters
-
-All filters apply both to normal incremental runs and historical refreshes.
-
-### `--station CODE`
-
-Select one station code; matching is case-insensitive:
-
-```bash
-vhg-api download --station VX
-```
-
-### `--variable CODE`
-
-Select one variable; matching is case-insensitive:
-
-```bash
-vhg-api download --variable H
-```
-
-Combine station and variable to target a specific configured series when that
-pair is unique:
-
-```bash
-vhg-api download --station VX --variable H
-```
-
 ### `--destination PATH`
 
-Select one exact configured destination after path normalization:
+Process only source rows whose configured `destination` exactly matches the supplied value.
+
+Example:
 
 ```bash
 vhg-api download \
   --destination 01_Rivieres/stations/145_VX/raw_data/H
 ```
 
-This is an exact destination filter, not a prefix or substring search.
+This filter acts on the `destination` value from `sources.csv`; it is not a replacement output directory and does not modify routing.
 
-## 10. Execution-control options
+### Combining filters
+
+Filters are combined. For example:
+
+```bash
+vhg-api download --station VX --variable H
+```
+
+selects rows matching both `station=VX` and `variable=H`.
+
+---
+
+## 7. Execution-control options
 
 ### `--dry-run`
 
@@ -321,32 +372,25 @@ This is an exact destination filter, not a prefix or substring search.
 vhg-api download --dry-run
 ```
 
-The runner resolves configuration, computes the common requested period, applies
-filters, and reports selected sources. It does **not** create a TDS client, does
-not contact the API, and does not write raw data files.
+Shows which source rows would be processed without contacting the API and without writing archive files.
 
-Logging is still configured, so a log file may be created in the configured log
-directory.
-
-Useful examples:
+Use it when checking filters or deployment configuration:
 
 ```bash
-vhg-api download --dry-run --station VX
-vhg-api download --dry-run --station VX --variable H
+vhg-api download --station VX --variable H --dry-run
 ```
 
 ### `--stop-on-error`
 
-Default behavior is fault-tolerant: if one source fails, the failure is logged
-and the runner attempts the remaining selected sources.
+The default behavior is resilient: if one source fails, the failure is logged and the runner continues with the remaining selected sources.
 
-Use:
+To stop immediately after the first source failure:
 
 ```bash
 vhg-api download --stop-on-error
 ```
 
-to stop after the first failed source.
+For unattended scheduled operation, the default continue-on-error behavior is generally preferable because healthy sources can still be updated.
 
 ### `--verbose`
 
@@ -354,88 +398,207 @@ to stop after the first failed source.
 vhg-api download --verbose
 ```
 
-Enable debug-level logging on both the console and the daily log file. Normal
-runs use INFO-level logging.
+Enables debug-level logging in addition to the normal operational messages. This is primarily useful for diagnosis and troubleshooting.
 
-## 11. Command-mode summary
+---
 
-| Command | Incremental archive state used? | Effective lower bound | Typical use |
-|---|---:|---|---|
-| `vhg-api download` | Yes | latest archive time minus overlap, or `initial_start` on first run | Scheduled synchronization |
-| `vhg-api download --start START` | No | `START` exactly | Refresh from a historical date through now |
-| `vhg-api download --start START --end END` | No | `START` exactly | Bounded historical refresh |
-| `vhg-api download --no-incremental` | No | `incremental.initial_start` | Deliberate broad replay/recovery |
-| `vhg-api download --dry-run` | Selection only | calculated but not downloaded | Preview configuration and filters |
+## 8. Configuration-path behavior
 
-## 12. Option interactions and precedence
+### Default CLI paths
 
-Important rules:
+Unless overridden:
 
-- `--start` automatically disables incremental archive-state calculation;
-- `--end` requires `--start`;
-- `--no-incremental` without `--start` uses `incremental.initial_start`;
-- `--station`, `--variable`, and `--destination` narrow the enabled source set;
-- `--dry-run` suppresses API contact and raw-data writes;
-- `--stop-on-error` changes source-failure handling only;
-- `--verbose` changes logging level only;
-- CLI `--config` and `--env-file` override their built-in default locations;
-- `sources_file` is not a CLI option and is resolved from the selected
-  `settings.yml`.
+```text
+--config   config/settings.yml
+--env-file config/.env
+```
 
-## 13. Logs
+For interactive use from the repository root this is convenient:
 
-The command writes to the console and to one daily UTF-8 log file:
+```bash
+vhg-api download
+```
+
+For cron, Task Scheduler, services, or any execution where the working directory may be unpredictable, use explicit absolute paths:
+
+```bash
+vhg-api download \
+  --config /opt/vhg_api/config/settings.yml \
+  --env-file /opt/vhg_api/config/.env
+```
+
+### `sources_file` inside `settings.yml`
+
+A relative `sources_file` is resolved relative to the directory containing `settings.yml`.
+
+Example:
+
+```yaml
+sources_file: sources.csv
+```
+
+with:
+
+```text
+/opt/vhg_api/config/settings.yml
+```
+
+resolves to:
+
+```text
+/opt/vhg_api/config/sources.csv
+```
+
+An absolute `sources_file` path is used directly.
+
+There is no separate `--sources` CLI option in the current release.
+
+---
+
+## 9. Archive update behavior
+
+Downloaded data are stored in yearly CSV files according to each source row's configured destination.
+
+During an update:
+
+1. existing rows are loaded;
+2. newly downloaded rows are appended after them;
+3. rows are sorted by `datetime_utc`;
+4. duplicate `datetime_utc` values are removed with the newly downloaded row taking precedence;
+5. the yearly file is replaced atomically through a temporary file.
+
+This behavior is intentional. If a value is changed retrospectively on VHG/TDS and that timestamp is downloaded again, the local raw archive is updated to the most recently downloaded value.
+
+`vhg_api` does not maintain a SQLite state database. The raw archive itself supplies incremental state through its latest `datetime_utc` value.
+
+---
+
+## 10. Logging and exit codes
+
+The runner writes operational messages to the console and to the configured log directory.
+
+Typical log filename:
 
 ```text
 <VHG_LOG_DIR>/vhg_api_YYYYMMDD.log
 ```
 
-The log records, among other details:
-
-- selected source count;
-- requested start/end bounds;
-- whether incremental and dry-run modes are active;
-- per-source measurement set and media;
-- rows downloaded and files written;
-- source failures with traceback;
-- final success/failure counts and duration.
-
-## 14. Exit codes
+Exit codes are suitable for cron or monitoring:
 
 | Exit code | Meaning |
 |---:|---|
-| `0` | Command completed successfully; for `download`, every selected source succeeded. |
-| `1` | At least one source failed, or another execution/runtime error occurred. |
-| `2` | Invalid configuration or invalid command usage such as `--end` without `--start`. |
+| `0` | All selected sources succeeded. |
+| `1` | At least one source failed, or an execution error occurred. |
+| `2` | Configuration or command-line usage error. |
 
-The default continue-on-error behavior is useful for scheduling: healthy sources
-are still updated, while the non-zero final exit code remains visible to IT
-monitoring.
+By default, one source failure does not prevent the remaining sources from being processed. The process still returns a non-zero exit code so that scheduled-job monitoring can detect the problem.
 
-## 15. Cron example
+---
 
-Installed package with explicit absolute configuration paths:
+## 11. Common command examples
+
+### Validate the normal configuration
+
+```bash
+vhg-api validate-config
+```
+
+### Validate and display disabled sources
+
+```bash
+vhg-api validate-config --include-disabled
+```
+
+### Normal operational update of all enabled sources
+
+```bash
+vhg-api download
+```
+
+### Preview a run
+
+```bash
+vhg-api download --dry-run
+```
+
+### Update one station
+
+```bash
+vhg-api download --station VX
+```
+
+### Update one variable across all stations
+
+```bash
+vhg-api download --variable Q
+```
+
+### Update one station and one variable
+
+```bash
+vhg-api download --station VX --variable H
+```
+
+### Refresh one historical month for one series
+
+```bash
+vhg-api download \
+  --station VX \
+  --variable H \
+  --start 2025-05-01T00:00:00Z \
+  --end 2025-05-31T23:59:59Z
+```
+
+### Refresh a historical period for every enabled source
+
+```bash
+vhg-api download \
+  --start 2025-05-01T00:00:00Z \
+  --end 2025-05-31T23:59:59Z
+```
+
+### Force a replay from `incremental.initial_start`
+
+```bash
+vhg-api download --no-incremental
+```
+
+### Stop after the first failed source
+
+```bash
+vhg-api download --stop-on-error
+```
+
+### Enable diagnostic logging
+
+```bash
+vhg-api download --verbose
+```
+
+### Production run with explicit configuration paths
+
+```bash
+vhg-api download \
+  --config /opt/vhg_api/config/settings.yml \
+  --env-file /opt/vhg_api/config/.env
+```
+
+---
+
+## 12. Scheduled execution
+
+For unattended operation, use explicit paths and the Python environment used to install `vhg_api`.
+
+Example cron entry:
 
 ```cron
 15 * * * * /opt/vhg_api/.venv/bin/vhg-api download --config /opt/vhg_api/config/settings.yml --env-file /opt/vhg_api/config/.env
 ```
 
-Repository mode:
+Repository-local execution is also supported:
 
 ```cron
 15 * * * * /opt/vhg_api/.venv/bin/python /opt/vhg_api/scripts/run_download.py download --config /opt/vhg_api/config/settings.yml --env-file /opt/vhg_api/config/.env
 ```
 
-The application already writes its own daily log file. Shell redirection is
-optional. IT should additionally monitor the process exit code and protect the
-`.env` file with appropriate filesystem permissions.
-
-## 16. Persistent state and safe reruns
-
-`vhg_api` does not create or maintain a SQLite database. The raw CSV archive is
-the synchronization state: the latest `datetime_utc` found in an existing yearly
-file determines the next incremental request range.
-
-Yearly archives are rewritten atomically through a temporary file. Repeated runs
-are safe because existing and downloaded rows are merged, sorted, and
-deduplicated by `datetime_utc`, with newly downloaded rows taking precedence.
+The application writes its own log file. IT monitoring should additionally check the process exit code.
