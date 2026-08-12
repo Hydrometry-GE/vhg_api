@@ -98,6 +98,16 @@ class TDSClient:
         """Apply headers, proxy policy, and POST retry behaviour."""
         self.session.headers.update({"Accept": "application/json"})
         self.session.trust_env = False
+        # TLS verification is secure by default. A configured CA bundle is
+        # used only while verification is enabled. Disabling verification is
+        # an explicit deployment choice (tls.verify: false), never an
+        # automatic consequence of an empty CA-bundle setting.
+        if not self.config.tls.verify:
+            self.session.verify = False
+        elif self.config.tls.ca_bundle is not None:
+            self.session.verify = str(self.config.tls.ca_bundle)
+        else:
+            self.session.verify = True
         if self.config.proxy.enabled:
             proxies: dict[str, str] = {}
             if self.config.proxy.http:

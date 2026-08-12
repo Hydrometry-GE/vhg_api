@@ -130,8 +130,9 @@ def test_historical_refresh_uses_explicit_start_despite_newer_archive(tmp_path: 
         client=client,
     )
 
-    assert client.calls[0]["start"] == "2026-01-01T00:00:00Z"
-    assert client.calls[0]["end"] == "2026-01-31T23:59:59Z"
+    assert client.calls[0]["start"] == pd.Timestamp("2026-01-01T00:00:00Z")
+    assert client.calls[-1]["end"] == pd.Timestamp("2026-01-31T23:59:59Z")
+    assert len(client.calls) > 1
 
 
 def test_historical_refresh_replaces_archived_value(tmp_path: Path) -> None:
@@ -208,3 +209,65 @@ def test_absolute_destination_bypasses_data_root(tmp_path: Path) -> None:
     )[0]
     assert result.output_file == tmp_path / "direct/VX/H/2026/145_VX_H_2026_raw.csv"
     assert result.output_file.exists()
+
+
+def test_long_download_is_split_into_configured_chunks() -> None:
+    """A multi-day interval is fetched as bounded inclusive API requests."""
+    client = FakeClient()
+    config = make_config()
+    download_configured(
+        config,
+        start="2026-01-01T00:00:00Z",
+        end="2026-01-03T12:00:00Z",
+        station="VX",
+        variable="H",
+        incremental=False,
+        client=client,
+    )
+
+    assert len(client.calls) == 3
+    assert [(call["start"], call["end"]) for call in client.calls] == [
+        (pd.Timestamp("2026-01-01T00:00:00Z"), pd.Timestamp("2026-01-02T00:00:00Z")),
+        (pd.Timestamp("2026-01-02T00:00:00Z"), pd.Timestamp("2026-01-03T00:00:00Z")),
+        (pd.Timestamp("2026-01-03T00:00:00Z"), pd.Timestamp("2026-01-03T12:00:00Z")),
+    ]
+
+
+def test_chunk_boundary_duplicates_are_kept_once_with_latest_value() -> None:
+    """Inclusive chunk boundaries are deduplicated after concatenation."""
+    class BoundaryClient:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, Any]] = []
+
+        def get_values(self, **kwargs: Any) -> pd.DataFrame:
+            self.calls.append(kwargs)
+            start = pd.Timestamp(kwargs["start"])
+            end = pd.Timestamp(kwargs["end"])
+            index = len(self.calls)
+            return pd.DataFrame({
+                "datetime_utc": [start, end],
+                "timestamp": [int(start.timestamp()), int(end.timestamp())],
+                "value": [float(index), float(index)],
+            })
+
+        def close(self) -> None:
+            raise AssertionError("Injected client must not be closed")
+
+    client = BoundaryClient()
+    result = download_configured(
+        make_config(),
+        start="2026-01-01T00:00:00Z",
+        end="2026-01-03T00:00:00Z",
+        station="VX",
+        variable="H",
+        incremental=False,
+        client=client,
+    )[0]
+
+    assert result.data["datetime_utc"].tolist() == [
+        pd.Timestamp("2026-01-01T00:00:00Z"),
+        pd.Timestamp("2026-01-02T00:00:00Z"),
+        pd.Timestamp("2026-01-03T00:00:00Z"),
+    ]
+    # The second chunk is newer and therefore wins at the shared boundary.
+    assert result.data.loc[result.data["datetime_utc"] == pd.Timestamp("2026-01-02T00:00:00Z"), "value"].iloc[0] == 2.0

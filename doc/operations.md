@@ -661,3 +661,47 @@ Repository-local execution is also supported:
 ```
 
 The application writes its own log file. IT monitoring should additionally check the process exit code.
+
+## TLS / institutional CA bundle
+
+HTTPS certificate verification is enabled by default with `tls.verify: true`.
+With an empty `VHG_CA_BUNDLE`, Requests uses its standard trusted CA store. On an
+institutional network whose HTTPS proxy uses an internal CA, keep verification
+enabled and set `VHG_CA_BUNDLE` in the selected `.env` to the PEM CA
+certificate/bundle supplied by IT.
+
+When explicitly required in a controlled environment, `tls.verify: false` in
+`settings.yml` disables certificate verification. This is a configuration
+setting, not a command-line option. It applies to all HTTP operations. An empty
+`VHG_CA_BUNDLE` alone never disables verification.
+
+
+## Long intervals and automatic chunking
+
+The CLI accepts the overall interval; it does not require the operator to split
+long periods manually. For each selected source, `vhg_api` divides the effective
+interval into TDS requests of at most `download.chunk_hours` (24 hours by
+default), concatenates the returned rows, and removes the deliberate duplicate
+at each inclusive chunk boundary.
+
+```yaml
+download:
+  chunk_hours: 24
+```
+
+This applies to all modes:
+
+```bash
+# First/normal synchronization
+vhg-api download
+
+# Historical refresh spanning a long period
+vhg-api download --station ES --variable P \
+  --start 2026-01-01T00:00:00Z --end 2026-08-01T00:00:00Z
+```
+
+With `--verbose`, each individual chunk interval is written at debug level in
+the log. At normal logging level, a source that needs more than one request is
+reported once with the number of chunks and configured maximum chunk duration.
+If TDS still returns HTTP 500 for a dense source, reduce `download.chunk_hours`
+(e.g. to 12 or 6) and retry the same command.

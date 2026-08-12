@@ -99,3 +99,33 @@ Supplying `--start` disables incremental lower-bound calculation. The exact
 requested period is downloaded and passed through the same merge policy, so
 historical duplicate timestamps replace their previous archived values. `--end`
 is optional but may not be supplied without `--start`.
+
+## Bounded API requests for long periods
+
+`vhg_api` does not send an arbitrarily long requested period as one TDS
+`get_values` call. The effective interval for each source is split into chunks
+controlled by:
+
+```yaml
+download:
+  chunk_hours: 24
+```
+
+For example, a request from 2026-01-01 00:00 UTC through 2026-01-03 12:00 UTC
+with `chunk_hours: 24` is sent as three API calls:
+
+```text
+2026-01-01 00:00 -> 2026-01-02 00:00
+2026-01-02 00:00 -> 2026-01-03 00:00
+2026-01-03 00:00 -> 2026-01-03 12:00
+```
+
+The repeated boundary timestamp is intentional. All non-empty chunk frames are
+concatenated, sorted by `datetime_utc`, and deduplicated with `keep="last"`.
+Only after the full source interval has been assembled is it enriched with the
+source metadata and written to the yearly raw archive.
+
+This behavior is especially important for first synchronizations and dense
+one-minute measurements, where a single multi-month API request can be
+incomplete or can trigger a TDS server error. Chunking is internal: operators
+continue to use the same `vhg-api download`, `--start`, and `--end` commands.

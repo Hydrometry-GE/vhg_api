@@ -9,9 +9,16 @@ api:
   timeout_seconds: 60
 
 proxy:
-  enabled: false
+  enabled: true
   http: ${HTTP_PROXY:-}
   https: ${HTTPS_PROXY:-}
+
+# TLS certificate verification is enabled by default.
+# Set verify: false only when explicitly required by a controlled network.
+# When verify is true, an optional institutional CA bundle may be supplied.
+tls:
+  verify: true
+  ca_bundle: ${VHG_CA_BUNDLE:-}
 
 storage:
   root: ${DATA_ROOT:-}
@@ -21,5 +28,10 @@ storage:
 incremental:
   initial_start: "2026-01-01T00:00:00Z"
   overlap_minutes: 1440
+
+# Maximum duration of one TDS get_values request. Long ranges are split
+# transparently, then concatenated and deduplicated at chunk boundaries.
+download:
+  chunk_hours: 24
 
 sources_file: sources.csv

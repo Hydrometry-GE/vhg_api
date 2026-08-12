@@ -103,6 +103,42 @@ Row order is preserved. A duplicate is defined by
 Proxy use is controlled explicitly in `settings.yml`. When disabled, proxy
 values are ignored. When enabled, at least one proxy address must be defined.
 
+### TLS certificate verification
+
+TLS behavior is controlled explicitly in `settings.yml`:
+
+```yaml
+tls:
+  verify: true
+  ca_bundle: ${VHG_CA_BUNDLE:-}
+```
+
+The combinations are:
+
+| `tls.verify` | CA bundle | Behavior |
+| --- | --- | --- |
+| `true` | empty | Normal secure verification using Requests' default trusted CA store. |
+| `true` | configured | Secure verification using the specified PEM CA certificate/bundle. |
+| `false` | any value | Certificate verification is explicitly disabled. |
+
+`verify: true` is the default and recommended setting. On an institutional
+network where an HTTPS proxy presents certificates signed by an internal CA, IT
+can provide a PEM CA certificate or bundle through `.env`:
+
+```dotenv
+VHG_CA_BUNDLE=C:/certs/institution-ca.pem
+```
+
+A relative CA-bundle path is resolved relative to the active `settings.yml`. If
+a configured bundle does not exist, configuration loading fails early.
+
+If the controlled network requires operation before a suitable CA bundle is
+available, verification can be disabled deliberately with `tls.verify: false`.
+This is an explicit security choice: it prevents HTTPS server-certificate
+authentication and should not be used when normal verification or an
+institutional CA bundle is available. Importantly, leaving `VHG_CA_BUNDLE` empty
+does **not** disable verification.
+
 
 ## Incremental settings
 
@@ -115,3 +151,30 @@ incremental:
 `initial_start` is the lower bound for a source with no existing archive.
 `overlap_minutes` controls how far the next incremental request moves backwards
 from the latest stored datetime before merging and deduplicating the result.
+
+## Download chunking
+
+Long TDS intervals are split into bounded API requests before the returned rows
+are concatenated:
+
+```yaml
+download:
+  chunk_hours: 24
+```
+
+`chunk_hours` must be an integer greater than zero. The default is `24` hours.
+This setting applies equally to first synchronizations, routine incremental
+updates, and explicit historical refreshes. It does not change the requested
+overall interval; it only limits the duration of each individual `get_values`
+request sent to TDS.
+
+Chunk boundaries are inclusive because the TDS API uses inclusive time bounds.
+Adjacent chunks therefore share one boundary timestamp. `vhg_api` sorts the
+combined rows and removes duplicate `datetime_utc` values with a keep-last
+policy, so the later chunk wins at that intentional overlap and no boundary
+observation is lost.
+
+A 24-hour default is deliberately conservative for dense one-minute series and
+for long first synchronizations. If a particular deployment still receives TDS
+server errors on dense sources, a smaller value such as `12` or `6` hours can be
+used without changing the source catalogue or CLI commands.

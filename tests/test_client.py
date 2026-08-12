@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -13,6 +14,7 @@ from vhg_api.config import (
     IncrementalConfig,
     ProxyConfig,
     StorageConfig,
+    TlsConfig,
 )
 from vhg_api.errors import APIError, AuthenticationError, ConnectionError
 
@@ -159,3 +161,23 @@ def test_get_values_accepts_array_response_and_builds_utc_frame() -> None:
     assert session.last_json["operation"] == "get_values"
     assert session.last_json["metering_code"] == "VX"
     assert session.last_json["media"] == 6
+
+
+def test_default_tls_verification_remains_enabled() -> None:
+    session = FakeSession(FakeResponse({"ping": "pong"}))
+    TDSClient(make_config(), session=session, retry_total=0)
+    assert session.verify is True
+
+
+def test_custom_ca_bundle_is_applied_to_session() -> None:
+    session = FakeSession(FakeResponse({"ping": "pong"}))
+    config = replace(make_config(), tls=TlsConfig(ca_bundle=Path("C:/certs/institution-ca.pem")))
+    TDSClient(config, session=session, retry_total=0)
+    assert session.verify == "C:/certs/institution-ca.pem"
+
+
+def test_tls_verification_can_be_explicitly_disabled() -> None:
+    session = FakeSession(FakeResponse({"ping": "pong"}))
+    config = replace(make_config(), tls=TlsConfig(verify=False))
+    TDSClient(config, session=session, retry_total=0)
+    assert session.verify is False

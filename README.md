@@ -10,7 +10,7 @@ and a repository-local runner suitable for manual use or scheduled execution.
 - short YAML deployment configuration and semicolon-separated source catalogue;
 - secrets and machine-specific paths supplied through `.env` or process environment variables;
 - SHA256 challenge authentication and access checks;
-- retries, timeouts, and optional proxy handling;
+- retries, timeouts, optional proxy handling, and optional institutional CA-bundle support;
 - generic relative, POSIX, Windows-drive, and UNC destination routing;
 - yearly semicolon-separated raw CSV archives;
 - overlap-based incremental updates and explicit historical refreshes;
@@ -164,6 +164,20 @@ forward from existing archive state. During the merge, newly downloaded rows
 replace older rows with the same `datetime_utc`, allowing retrospective TDS
 corrections to propagate into the raw archive.
 
+Long requested intervals are automatically split into bounded TDS requests. The
+default is 24 hours per request, configured in `settings.yml`:
+
+```yaml
+download:
+  chunk_hours: 24
+```
+
+This is transparent to the CLI: first synchronizations and historical refreshes
+can span months or years without requiring the operator to split the dates
+manually. Adjacent chunks intentionally share their boundary timestamp; the
+combined result is sorted and deduplicated with the newest chunk winning at the
+shared boundary.
+
 `--end` cannot be used alone. It must be paired with `--start`.
 
 By default, the source catalogue is selected through `sources_file` in
@@ -175,9 +189,20 @@ the directory containing the active `settings.yml`. After the catalogue is loade
 For the full operational behavior, option interactions, exit codes, and cron
 examples, see [Operational runner and command-line reference](doc/operations.md).
 
+### Institutional proxy certificates
+
+TLS verification is enabled by default (`tls.verify: true`) and requires no extra
+configuration on networks where the normal public certificate chain is trusted.
+If an institutional HTTPS proxy uses an internal CA, set the optional
+`VHG_CA_BUNDLE` path in `config/.env` to the PEM certificate/bundle supplied by
+IT. If certificate verification must deliberately be bypassed in a controlled
+environment, set `tls.verify: false` explicitly in `settings.yml`. An empty CA
+bundle never disables verification by itself. See `doc/configuration.md` and
+`doc/troubleshooting.md`.
+
 ## Configuration
 
-- `config/settings.yml`: API, proxy, storage, logging, incremental settings, and `sources_file`;
+- `config/settings.yml`: API, proxy/TLS, storage, logging, incremental settings, and `sources_file`;
 - `config/sources.csv`: enabled sources and their destinations;
 - `config/.env`: local secrets and deployment paths; never commit this file.
 

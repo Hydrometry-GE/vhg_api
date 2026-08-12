@@ -4,5 +4,7 @@ __pycache__/
 .pytest_cache/
 .spyproject/
 config/.env
+config/*.crt
+config/*.pem
 runtime/
 logs/

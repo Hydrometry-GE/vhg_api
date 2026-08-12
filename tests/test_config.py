@@ -257,3 +257,115 @@ true;VX;145_VX;VX;H;6;one
     config = load_config(settings, env, sources_file=override_sources)
 
     assert config.sources_file == override_sources.resolve()
+
+
+def test_tls_ca_bundle_is_optional_and_defaults_to_normal_verification(tmp_path: Path) -> None:
+    sources = """enabled;station;series_id;measurement_set;variable;media;destination
+true;VX;145_VX;VX;H;6;one
+"""
+    settings, env = write_files(tmp_path, sources)
+
+    config = load_config(settings, env)
+
+    assert config.tls.verify is True
+    assert config.tls.ca_bundle is None
+
+
+def test_tls_ca_bundle_relative_path_is_resolved_beside_settings(tmp_path: Path) -> None:
+    sources = """enabled;station;series_id;measurement_set;variable;media;destination
+true;VX;145_VX;VX;H;6;one
+"""
+    settings, env = write_files(tmp_path, sources)
+    cert_dir = tmp_path / "certs"
+    cert_dir.mkdir()
+    bundle = cert_dir / "institution-ca.pem"
+    bundle.write_text("test certificate placeholder", encoding="utf-8")
+    settings.write_text(
+        SETTINGS.replace(
+            "storage:\n",
+            "tls:\n  ca_bundle: ${VHG_CA_BUNDLE:-}\nstorage:\n",
+        ),
+        encoding="utf-8",
+    )
+    env.write_text(ENV + "VHG_CA_BUNDLE=certs/institution-ca.pem\n", encoding="utf-8")
+
+    config = load_config(settings, env)
+
+    assert config.tls.ca_bundle == bundle.resolve()
+
+
+def test_tls_ca_bundle_must_exist_when_configured(tmp_path: Path) -> None:
+    sources = """enabled;station;series_id;measurement_set;variable;media;destination
+true;VX;145_VX;VX;H;6;one
+"""
+    settings, env = write_files(tmp_path, sources)
+    settings.write_text(
+        SETTINGS.replace(
+            "storage:\n",
+            "tls:\n  ca_bundle: ${VHG_CA_BUNDLE:-}\nstorage:\n",
+        ),
+        encoding="utf-8",
+    )
+    env.write_text(ENV + "VHG_CA_BUNDLE=missing-ca.pem\n", encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="TLS CA bundle does not exist"):
+        load_config(settings, env)
+
+
+def test_tls_verification_can_be_disabled_explicitly(tmp_path: Path) -> None:
+    sources = """enabled;station;series_id;measurement_set;variable;media;destination
+true;VX;145_VX;VX;H;6;one
+"""
+    settings, env = write_files(tmp_path, sources)
+    settings.write_text(
+        SETTINGS.replace("storage:\n", "tls:\n  verify: false\n  ca_bundle: ${VHG_CA_BUNDLE:-}\nstorage:\n"),
+        encoding="utf-8",
+    )
+    config = load_config(settings, env)
+    assert config.tls.verify is False
+    assert config.tls.ca_bundle is None
+
+
+def test_tls_verify_must_be_boolean(tmp_path: Path) -> None:
+    sources = """enabled;station;series_id;measurement_set;variable;media;destination
+true;VX;145_VX;VX;H;6;one
+"""
+    settings, env = write_files(tmp_path, sources)
+    settings.write_text(SETTINGS.replace("storage:\n", "tls:\n  verify: nope\nstorage:\n"), encoding="utf-8")
+    with pytest.raises(ConfigError, match="tls.verify must be true or false"):
+        load_config(settings, env)
+
+
+def test_download_chunk_hours_defaults_to_24(tmp_path: Path) -> None:
+    sources = """enabled;station;series_id;measurement_set;variable;media;destination
+true;VX;145_VX;VX;H;6;one
+"""
+    settings, env = write_files(tmp_path, sources)
+    config = load_config(settings, env)
+    assert config.download.chunk_hours == 24
+
+
+def test_download_chunk_hours_can_be_configured(tmp_path: Path) -> None:
+    sources = """enabled;station;series_id;measurement_set;variable;media;destination
+true;VX;145_VX;VX;H;6;one
+"""
+    settings, env = write_files(tmp_path, sources)
+    settings.write_text(
+        SETTINGS.replace("sources_file: sources.csv", "download:\n  chunk_hours: 12\nsources_file: sources.csv"),
+        encoding="utf-8",
+    )
+    config = load_config(settings, env)
+    assert config.download.chunk_hours == 12
+
+
+def test_download_chunk_hours_must_be_greater_than_zero(tmp_path: Path) -> None:
+    sources = """enabled;station;series_id;measurement_set;variable;media;destination
+true;VX;145_VX;VX;H;6;one
+"""
+    settings, env = write_files(tmp_path, sources)
+    settings.write_text(
+        SETTINGS.replace("sources_file: sources.csv", "download:\n  chunk_hours: 0\nsources_file: sources.csv"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="download.chunk_hours must be greater than zero"):
+        load_config(settings, env)

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Split long source intervals into configurable bounded TDS requests via `download.chunk_hours` (default 24 h), then concatenate and deduplicate inclusive chunk boundaries.
+- Add chunk-level debug logging and configuration validation for a strictly positive chunk duration.
+- Document chunking for long first synchronizations, historical refreshes, dense one-minute series, and HTTP 500 troubleshooting.
+- Add explicit `tls.verify` control (default `true`) plus optional `tls.ca_bundle` / `VHG_CA_BUNDLE` support for institutional HTTPS proxies; verification can be deliberately disabled with `tls.verify: false`.
+- Validate configured CA-bundle paths early and document institutional proxy certificate troubleshooting.
+
 - Formalize and test that relative `sources_file` paths are resolved from the directory containing the selected `settings.yml`, including custom `--config` locations.
 - Add `--sources PATH` to `download` and `validate-config` as a temporary source-catalogue override, with relative paths resolved beside the active `settings.yml`.
 - Document that `--env-file` remains an independent CLI path and is not affected by settings-relative path resolution.

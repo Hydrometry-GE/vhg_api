@@ -14,7 +14,7 @@ from __future__ import annotations
 import csv
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -44,6 +44,22 @@ class ProxyConfig:
     enabled: bool
     http: str | None
     https: str | None
+
+
+@dataclass(frozen=True)
+class TlsConfig:
+    """TLS certificate-verification settings for HTTPS requests.
+
+    ``verify`` controls certificate verification and defaults to ``True``.
+    ``ca_bundle`` optionally points to a PEM certificate or CA bundle used
+    instead of the default Requests/Certifi trust store.  Setting ``verify``
+    to ``False`` explicitly disables certificate verification and should be
+    reserved for controlled environments where the security trade-off is
+    understood.
+    """
+
+    verify: bool = True
+    ca_bundle: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -105,6 +121,18 @@ class IncrementalConfig:
 
 
 @dataclass(frozen=True)
+class DownloadConfig:
+    """Controls how long TDS download intervals are split into API requests.
+
+    ``chunk_hours`` is the maximum duration of one ``get_values`` request.
+    Long first synchronizations and historical refreshes are divided into
+    consecutive inclusive chunks, then concatenated and deduplicated.
+    """
+
+    chunk_hours: int = 24
+
+
+@dataclass(frozen=True)
 class MeasurementSource:
     """One row from ``sources.csv`` after validation and normalization."""
     enabled: bool
@@ -142,6 +170,8 @@ class AppConfig:
     sources_file: Path
     sources: tuple[MeasurementSource, ...]
     stations: tuple[Station, ...]
+    tls: TlsConfig = field(default_factory=TlsConfig)
+    download: DownloadConfig = field(default_factory=DownloadConfig)
 
     @property
     def active_sources(self) -> tuple[MeasurementSource, ...]:
@@ -253,6 +283,14 @@ def _positive_int(mapping: Mapping[str, Any], key: str, context: str) -> int:
         raise ConfigError(f"{context}.{key} must be an integer; got {value!r}") from exc
     if parsed < 0:
         raise ConfigError(f"{context}.{key} must be non-negative; got {parsed}")
+    return parsed
+
+
+def _strictly_positive_int(mapping: Mapping[str, Any], key: str, context: str) -> int:
+    """Parse a required integer that must be greater than zero."""
+    parsed = _positive_int(mapping, key, context)
+    if parsed <= 0:
+        raise ConfigError(f"{context}.{key} must be greater than zero; got {parsed}")
     return parsed
 
 
@@ -466,8 +504,14 @@ def load_config(
 
     api_data = _require_mapping(data, "api")
     proxy_data = _require_mapping(data, "proxy")
+    tls_data = data.get("tls", {})
+    if not isinstance(tls_data, Mapping):
+        raise ConfigError("Missing or invalid mapping: tls")
     storage_data = _require_mapping(data, "storage")
     incremental_data = _require_mapping(data, "incremental")
+    download_data = data.get("download", {})
+    if not isinstance(download_data, Mapping):
+        raise ConfigError("Missing or invalid mapping: download")
 
     proxy_enabled = proxy_data.get("enabled", False)
     if not isinstance(proxy_enabled, bool):
@@ -479,6 +523,19 @@ def load_config(
         raise ConfigError(
             "proxy.enabled is true, but neither proxy.http nor proxy.https is defined"
         )
+
+    tls_verify = tls_data.get("verify", True)
+    if not isinstance(tls_verify, bool):
+        raise ConfigError("tls.verify must be true or false")
+
+    ca_bundle_text = str(tls_data.get("ca_bundle") or "").strip()
+    ca_bundle = (
+        _resolve_from_settings(ca_bundle_text, settings_path)
+        if ca_bundle_text
+        else None
+    )
+    if ca_bundle is not None and not ca_bundle.is_file():
+        raise ConfigError(f"TLS CA bundle does not exist or is not a file: {ca_bundle}")
 
     if sources_file is None:
         sources_name: str | Path = _required_text(data, "sources_file", "settings")
@@ -519,4 +576,10 @@ def load_config(
         sources_file=sources_path,
         sources=sources,
         stations=_build_stations(sources),
+        tls=TlsConfig(verify=tls_verify, ca_bundle=ca_bundle),
+        download=DownloadConfig(
+            chunk_hours=_strictly_positive_int(download_data, "chunk_hours", "download")
+            if "chunk_hours" in download_data
+            else 24
+        ),
     )

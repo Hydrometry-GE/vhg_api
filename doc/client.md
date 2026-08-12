@@ -15,6 +15,16 @@ A fresh challenge is generated for each secured request.
 
 Proxy use is controlled only by `proxy.enabled` in `settings.yml`. The HTTP client sets `Session.trust_env = False`, so machine-level `HTTP_PROXY` or `HTTPS_PROXY` variables cannot silently activate a proxy when configuration says it is disabled.
 
+## TLS certificate verification
+
+TLS verification is enabled by default. With `tls.verify: true` and an empty
+`tls.ca_bundle`, Requests uses its normal CA trust store. With verification
+enabled and a CA bundle configured, the session uses that PEM bundle as its
+verification trust store. Setting `tls.verify: false` explicitly sets the
+Requests session to `verify=False`; this is intended only for controlled
+environments where certificate verification cannot be used. An empty CA bundle
+never disables verification automatically.
+
 ## Manual test sequence
 
 1. `00_project_info.py`

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import logging
 from pathlib import Path
 from typing import Iterable
 
@@ -27,6 +28,101 @@ class DownloadResult:
     def output_file(self) -> Path | None:
         """Backward-compatible shortcut when exactly one file was written."""
         return self.output_files[0] if len(self.output_files) == 1 else None
+
+
+def _utc_timestamp(value: str | datetime | pd.Timestamp) -> pd.Timestamp:
+    """Normalize one datetime-like value to a timezone-aware UTC timestamp."""
+    timestamp = pd.Timestamp(value)
+    if timestamp.tzinfo is None:
+        return timestamp.tz_localize("UTC")
+    return timestamp.tz_convert("UTC")
+
+
+def _chunk_bounds(
+    start: str | datetime | pd.Timestamp,
+    end: str | datetime | pd.Timestamp,
+    *,
+    chunk_hours: int,
+) -> tuple[tuple[pd.Timestamp, pd.Timestamp], ...]:
+    """Split an inclusive UTC interval into consecutive inclusive chunks.
+
+    Adjacent chunks intentionally share their boundary timestamp. The frames
+    are concatenated and deduplicated afterwards with ``keep="last"`` so no
+    observation can be lost at a chunk boundary.
+    """
+    if chunk_hours <= 0:
+        raise ValueError("download.chunk_hours must be greater than zero")
+    lower = _utc_timestamp(start)
+    upper = _utc_timestamp(end)
+    if lower > upper:
+        raise ValueError(f"Start time {lower} is after end time {upper}")
+
+    step = pd.Timedelta(hours=chunk_hours)
+    chunks: list[tuple[pd.Timestamp, pd.Timestamp]] = []
+    current = lower
+    while current < upper:
+        chunk_end = min(current + step, upper)
+        chunks.append((current, chunk_end))
+        current = chunk_end
+    if not chunks:
+        chunks.append((lower, upper))
+    return tuple(chunks)
+
+
+def _download_in_chunks(
+    client: TDSClient,
+    source: MeasurementSource,
+    *,
+    start: str | datetime | pd.Timestamp,
+    end: str | datetime | pd.Timestamp,
+    chunk_hours: int,
+) -> pd.DataFrame:
+    """Download one configured source in bounded TDS requests.
+
+    TDS can return incomplete data or server errors for very long ranges,
+    especially for dense one-minute series. Chunking keeps every API request
+    bounded while remaining transparent to callers.
+    """
+    chunks = _chunk_bounds(start, end, chunk_hours=chunk_hours)
+    log = logging.getLogger("vhg_api.download")
+    if len(chunks) > 1:
+        log.info(
+            "Splitting %s/%s into %d chunk(s) of at most %dh",
+            source.station, source.variable, len(chunks), chunk_hours,
+        )
+
+    frames: list[pd.DataFrame] = []
+    for index, (chunk_start, chunk_end) in enumerate(chunks, start=1):
+        log.debug(
+            "Chunk %d/%d for %s/%s: %s -> %s",
+            index, len(chunks), source.station, source.variable,
+            chunk_start.isoformat(), chunk_end.isoformat(),
+        )
+        frame = client.get_values(
+            measurement_set=source.measurement_set,
+            media=source.media,
+            start=chunk_start,
+            end=chunk_end,
+        )
+        if not frame.empty:
+            frames.append(frame)
+
+    if not frames:
+        return pd.DataFrame({
+            "datetime_utc": pd.Series([], dtype="datetime64[ns, UTC]"),
+            "timestamp": pd.Series([], dtype="int64"),
+            "value": pd.Series([], dtype="float64"),
+        })
+
+    combined = pd.concat(frames, ignore_index=True)
+    combined["datetime_utc"] = pd.to_datetime(
+        combined["datetime_utc"], utc=True, errors="raise"
+    )
+    return (
+        combined.sort_values("datetime_utc", kind="stable")
+        .drop_duplicates(subset=["datetime_utc"], keep="last")
+        .reset_index(drop=True)
+    )
 
 
 def select_sources(
@@ -162,6 +258,9 @@ def download_configured(
 
     Notes
     -----
+    Long intervals are transparently split into requests of at most
+    ``download.chunk_hours``. Adjacent chunks share their boundary timestamp;
+    concatenation and keep-last deduplication remove that intentional overlap.
     Data crossing a UTC calendar-year boundary are split into separate files.
     Relative destinations are anchored below ``storage.root``; absolute
     destinations are used directly.
@@ -186,11 +285,12 @@ def download_configured(
                 )
 
             try:
-                frame = active_client.get_values(
-                    measurement_set=source.measurement_set,
-                    media=source.media,
+                frame = _download_in_chunks(
+                    active_client,
+                    source,
                     start=effective_start,
                     end=end,
+                    chunk_hours=config.download.chunk_hours,
                 )
             except Exception as exc:
                 raise DownloadError(
